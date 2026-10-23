@@ -1,16 +1,16 @@
-const MODEL = 'gemma-4-26b-a4b-it';
-const FALLBACK_MODEL = 'gemma-4-31b-it';
+const MODELS = ['gemma-4-26b-a4b-it', 'gemma-4-31b-it']; // keep in sync with options.html
+const DEFAULT_MODEL = MODELS[0];
 const modelUrl = (model) =>
   `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
 // No responseMimeType: it makes Gemma return HTTP 500. Thinking is turned down instead.
-const GENERATION_CONFIG = { temperature: 0, maxOutputTokens: 1024 };
+const GENERATION_CONFIG = { temperature: 0, maxOutputTokens: 256 };
 const THINKING_CONFIG = { thinkingLevel: 'minimal' };
 const TIMEOUT_MS = 60000;
 const RETRIES = 2;
 const RETRY_DELAY_MS = 1500;
 
 const INSTRUCTIONS = `You are GuideMe, a patient guide helping a non-technical user complete a goal on a website. Given the user's goal and the list of interactive elements, choose the ONE element the user should click or use next. If the goal is already achieved, use action finish. If no element fits, use action ask_user and explain what to do in the instruction.
-Write a short, friendly instruction (max 15 words).
+Write a short, friendly instruction (max 15 words). Keep "reason" to 12 words or fewer.
 Output a single JSON object with this shape:
 {"action":"highlight"|"finish"|"ask_user","elementId":number|null,"instruction":string,"reason":string}
 
@@ -34,6 +34,27 @@ function log(msg) {
   line.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
   logEl.appendChild(line);
   logEl.scrollTop = logEl.scrollHeight;
+  return line;
+}
+
+let stepCount = 0;
+let lastGoal = '';
+
+// In-memory cache of model decisions, keyed by page URL + goal + element-list hash.
+const decisionCache = new Map();
+
+function hashString(s) {
+  let h = 5381;
+  for (let i = 0; i < s.length; i++) h = ((h * 33) ^ s.charCodeAt(i)) >>> 0;
+  return h.toString(36);
+}
+
+// Keeps a running average of response time per model so the two can be compared in Options.
+async function recordTiming(model, ms) {
+  const { timings = {} } = await chrome.storage.local.get('timings');
+  const t = timings[model] || { count: 0, totalMs: 0 };
+  timings[model] = { count: t.count + 1, totalMs: t.totalMs + ms, lastMs: ms };
+  await chrome.storage.local.set({ timings });
 }
 
 function clean(value, max) {
@@ -55,7 +76,7 @@ function buildPrompt(goal, title, url, list) {
   };
 }
 
-const CONTENT_VERSION = 3; // must match VERSION in content.js
+const CONTENT_VERSION = 5; // must match VERSION in content.js
 
 // Always inject the current content.js first: it replaces any older copy still running in
 // the page (e.g. a tab opened before the extension was reloaded), and is a no-op if current.
@@ -105,14 +126,15 @@ async function callWithRetry(apiKey, prompt, model) {
   }
 }
 
-// Primary model first; if it keeps failing with 500/503, one last attempt on the fallback model.
-async function callGemmaWithRetry(apiKey, prompt) {
+// Chosen model first; if it keeps failing with 500/503, one last attempt on the other model.
+async function callGemmaWithRetry(apiKey, prompt, model) {
   try {
-    return await callWithRetry(apiKey, prompt, MODEL);
+    return await callWithRetry(apiKey, prompt, model);
   } catch (err) {
     if (!isTransient(err)) throw err;
-    log(`Falling back to ${FALLBACK_MODEL}`);
-    return await callWithRetry(apiKey, prompt, FALLBACK_MODEL);
+    const fallback = MODELS.find((m) => m !== model);
+    log(`Falling back to ${fallback}`);
+    return await callWithRetry(apiKey, prompt, fallback);
   }
 }
 
@@ -147,7 +169,9 @@ async function callGemma(apiKey, prompt, model, thinking) {
   } finally {
     clearTimeout(timer);
   }
-  log(`Gemma responded in ${((Date.now() - started) / 1000).toFixed(1)}s (status ${res.status})`);
+  const elapsedMs = Date.now() - started;
+  log(`${model} responded in ${(elapsedMs / 1000).toFixed(1)}s (status ${res.status})`);
+  if (res.ok) await recordTiming(model, elapsedMs).catch(() => {});
   if (!res.ok) {
     let message = body.slice(0, 300);
     try {
@@ -211,13 +235,29 @@ async function run(goal) {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (!tab) throw new Error('No active tab.');
 
+  const { model: savedModel } = await chrome.storage.local.get('model');
+  const model = MODELS.includes(savedModel) ? savedModel : DEFAULT_MODEL;
+
   await ensureContentScript(tab.id);
+  // Perceived speed: show the pill on the page right away. It is removed when the highlight
+  // appears (content.js) or when the run ends (start()).
+  await sendToTab(tab.id, 'status', { text: 'GuideMe is reading the page...' });
   const scan = await sendToTab(tab.id, 'scan');
   if (!scan || !Array.isArray(scan.elements)) throw new Error('Page scan returned nothing. Reload the page and try again.');
   const { elements, title, url } = scan;
-  const prompt = buildPrompt(goal, title, url, formatElements(elements));
+  const list = formatElements(elements);
+  const prompt = buildPrompt(goal, title, url, list);
   log(`Page scan v${scan.version} found ${elements.length} elements (sending ${elements.length}, prompt ${prompt.system.length + prompt.user.length} chars)`);
-  const decision = parseDecision(await callGemmaWithRetry(apiKey, prompt));
+
+  const cacheKey = `${url}\n${goal}\n${hashString(list)}`;
+  let decision = decisionCache.get(cacheKey);
+  if (decision) {
+    log('Cached');
+  } else {
+    log(`Model: ${model}`);
+    decision = parseDecision(await callGemmaWithRetry(apiKey, prompt, model));
+    decisionCache.set(cacheKey, decision);
+  }
 
   if (decision.reason) log(`Navigator: ${decision.reason}`);
   const instruction = decision.instruction || '';
@@ -225,7 +265,10 @@ async function run(goal) {
   if (decision.action === 'highlight') {
     const target = elements.find((e) => e.id === String(decision.elementId));
     if (!target) throw new Error(`Model chose unknown element ${decision.elementId}`);
-    await sendToTab(tab.id, 'highlight', { id: target.id, instruction });
+    // Step number for the badge: counts up while the same goal is pressed again, resets for a new goal.
+    stepCount = goal === lastGoal ? stepCount + 1 : 1;
+    lastGoal = goal;
+    await sendToTab(tab.id, 'highlight', { id: target.id, instruction, step: stepCount });
     log(`Step: ${instruction}`);
   } else {
     await sendToTab(tab.id, 'clear');
@@ -241,13 +284,23 @@ async function start() {
   }
   log(`Started: ${goal}`);
   startButton.disabled = true;
-  log('Thinking…');
+  // One log line, updated live with the elapsed time while we wait.
+  const began = Date.now();
+  const waitLine = log('Thinking… 0.0s');
+  const ticker = setInterval(() => {
+    waitLine.textContent = `[${new Date(began).toLocaleTimeString()}] Thinking… ${((Date.now() - began) / 1000).toFixed(1)}s`;
+  }, 100);
   try {
     await run(goal);
   } catch (err) {
     log(`Error: ${(err && err.message) || err}`);
   } finally {
+    clearInterval(ticker);
+    waitLine.textContent = `[${new Date(began).toLocaleTimeString()}] Finished in ${((Date.now() - began) / 1000).toFixed(1)}s`;
     startButton.disabled = false;
+    // Make sure the status pill never stays on the page (e.g. after an error or a non-highlight answer).
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true }).catch(() => []);
+    if (tab) await sendToTab(tab.id, 'hide-status').catch(() => {});
   }
 }
 

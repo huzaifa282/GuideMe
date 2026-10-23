@@ -2,7 +2,7 @@
 // A newer version replaces an older copy already running in the page. Message types carry
 // the version, so a stale copy that is still alive never answers a newer panel.
 (() => {
-const VERSION = 3;
+const VERSION = 5;
 if (window.__guidemeVersion === VERSION) return;
 if (window.__guidemeCleanup) window.__guidemeCleanup();
 window.__guidemeVersion = VERSION;
@@ -12,7 +12,49 @@ const MAX_TEXT = 40;
 const SELECTOR = 'button, a, input, select, [role=button]';
 
 let overlayHost = null;
+let pillHost = null;
 let rafId = null;
+
+// Small animated status pill at the top of the page (Shadow DOM, so site CSS can't touch it).
+function showStatus(text) {
+  hideStatus();
+  pillHost = document.createElement('div');
+  pillHost.id = 'guideme-status';
+  pillHost.style.cssText = 'position:fixed;top:12px;left:0;right:0;display:flex;justify-content:center;pointer-events:none;z-index:2147483647;';
+  const shadow = pillHost.attachShadow({ mode: 'open' });
+  shadow.innerHTML = `
+    <style>
+      .pill {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 14px;
+        border-radius: 999px;
+        background: #1f1f1f;
+        color: #fff;
+        font: 14px/1.2 system-ui, sans-serif;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
+        animation: fade-in 0.2s ease-out;
+      }
+      .dot {
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        background: #ff6a00;
+        animation: blink 1s ease-in-out infinite;
+      }
+      @keyframes blink { 0%, 100% { opacity: 0.25; transform: scale(0.8); } 50% { opacity: 1; transform: scale(1.1); } }
+      @keyframes fade-in { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
+    </style>
+    <div class="pill"><span class="dot"></span><span class="label"></span></div>`;
+  shadow.querySelector('.label').textContent = text;
+  document.documentElement.appendChild(pillHost);
+}
+
+function hideStatus() {
+  if (pillHost) pillHost.remove();
+  pillHost = null;
+}
 
 // Visible to the user: styled visible, non-zero size, centre inside the viewport,
 // and not covered by another element (this also excludes elements behind a modal).
@@ -57,12 +99,112 @@ function scanElements() {
 function clearHighlight() {
   if (rafId !== null) cancelAnimationFrame(rafId);
   rafId = null;
+  document.removeEventListener('keydown', onKeydown, true);
   if (overlayHost) overlayHost.remove();
   overlayHost = null;
 }
 
-function highlight(id, instruction) {
+function onKeydown(e) {
+  if (e.key === 'Escape') clearHighlight();
+}
+
+// Corner radius of the element in px (percentages resolve against the smaller side).
+function cornerRadius(el, rect) {
+  const value = getComputedStyle(el).borderTopLeftRadius;
+  const n = parseFloat(value) || 0;
+  return value.endsWith('%') ? (n / 100) * Math.min(rect.width, rect.height) : n;
+}
+
+const OVERLAY_CSS = `
+  :host { all: initial; }
+  * { box-sizing: border-box; }
+  .ring {
+    position: fixed;
+    border: 3px solid #10b981;
+    pointer-events: none;
+    /* Light spotlight: dims everything outside the ring. */
+    box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.35);
+    transition: box-shadow 0.25s ease;
+  }
+  .ring.hover { box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0); }
+  .ring::after {
+    content: '';
+    position: absolute;
+    inset: -3px;
+    border-radius: inherit;
+    pointer-events: none;
+    animation: glow 1.6s ease-out infinite;
+  }
+  @keyframes glow {
+    0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.55); }
+    100% { box-shadow: 0 0 0 14px rgba(16, 185, 129, 0); }
+  }
+  .badge {
+    position: fixed;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    background: #10b981;
+    color: #fff;
+    font: 700 13px/24px system-ui, sans-serif;
+    text-align: center;
+    pointer-events: none;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+  }
+  .card {
+    position: fixed;
+    left: 50%;
+    bottom: 24px;
+    transform: translateX(-50%);
+    width: calc(100vw - 32px);
+    max-width: 420px;
+    padding: 14px 40px 12px 16px;
+    border-radius: 14px;
+    background: #fff;
+    color: #111827;
+    font-family: system-ui, sans-serif;
+    box-shadow: 0 8px 28px rgba(0, 0, 0, 0.25), 0 1px 3px rgba(0, 0, 0, 0.12);
+    pointer-events: auto;
+    animation: slide-up 0.2s ease-out;
+  }
+  .card.top { bottom: auto; top: 24px; animation-name: slide-down; }
+  .card[dir=rtl] { padding: 14px 16px 12px 40px; }
+  @keyframes slide-up {
+    from { opacity: 0; transform: translate(-50%, 12px); }
+    to { opacity: 1; transform: translate(-50%, 0); }
+  }
+  @keyframes slide-down {
+    from { opacity: 0; transform: translate(-50%, -12px); }
+    to { opacity: 1; transform: translate(-50%, 0); }
+  }
+  .step { font-size: 12px; font-weight: 700; letter-spacing: 0.03em; text-transform: uppercase; color: #10b981; }
+  .text { margin-top: 4px; font-size: 15px; line-height: 1.4; }
+  .notice { margin-top: 8px; font-size: 13px; color: #b45309; }
+  .footer { margin-top: 10px; font-size: 11px; color: #6b7280; }
+  .close {
+    position: absolute;
+    top: 8px;
+    inset-inline-end: 8px;
+    width: 26px;
+    height: 26px;
+    border: 0;
+    border-radius: 50%;
+    background: transparent;
+    color: #6b7280;
+    font: 18px/26px system-ui, sans-serif;
+    cursor: pointer;
+  }
+  .close:hover { background: #f3f4f6; color: #111827; }
+  [hidden] { display: none !important; }
+  @media (prefers-reduced-motion: reduce) {
+    .ring, .card { transition: none; animation: none; }
+    .ring::after { animation: none; }
+  }
+`;
+
+function highlight(id, instruction, step) {
   clearHighlight();
+  hideStatus();
   const el = document.querySelector(`[data-guideme-id="${id}"]`);
   if (!el) return false;
 
@@ -74,52 +216,59 @@ function highlight(id, instruction) {
     'position:fixed;inset:0;pointer-events:none;z-index:2147483647;';
   const shadow = overlayHost.attachShadow({ mode: 'open' });
   shadow.innerHTML = `
-    <style>
-      .ring {
-        position: fixed;
-        box-sizing: border-box;
-        border: 3px solid #ff6a00;
-        border-radius: 8px;
-        animation: pulse 1.2s ease-out infinite;
-      }
-      @keyframes pulse {
-        0% { box-shadow: 0 0 0 0 rgba(255, 106, 0, 0.6); }
-        100% { box-shadow: 0 0 0 14px rgba(255, 106, 0, 0); }
-      }
-      .bubble {
-        position: fixed;
-        max-width: 260px;
-        padding: 8px 12px;
-        border-radius: 8px;
-        background: #1f1f1f;
-        color: #fff;
-        font: 14px/1.3 system-ui, sans-serif;
-        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
-      }
-    </style>
+    <style>${OVERLAY_CSS}</style>
     <div class="ring"></div>
-    <div class="bubble"></div>`;
+    <div class="badge"></div>
+    <div class="card" role="status">
+      <div class="step"></div>
+      <div class="text"></div>
+      <div class="notice" hidden>Scroll to see the highlighted item</div>
+      <div class="footer">GuideMe</div>
+      <button class="close" type="button" aria-label="Close">×</button>
+    </div>`;
   const ring = shadow.querySelector('.ring');
-  const bubble = shadow.querySelector('.bubble');
-  bubble.textContent = instruction;
+  const badge = shadow.querySelector('.badge');
+  const card = shadow.querySelector('.card');
+  const notice = shadow.querySelector('.notice');
+  const stepNumber = step || 1;
+  badge.textContent = stepNumber;
+  shadow.querySelector('.step').textContent = `Step ${stepNumber}`;
+  shadow.querySelector('.text').textContent = instruction;
+  // Right-to-left scripts (Urdu, Arabic, Hebrew) flip the card.
+  card.dir = /[֐-ࣿ]/.test(instruction) ? 'rtl' : 'ltr';
+  shadow.querySelector('.close').addEventListener('click', clearHighlight);
   document.documentElement.appendChild(overlayHost);
+  document.addEventListener('keydown', onKeydown, true);
 
-  const PAD = 4;
-  const GAP = 10;
+  // Fade the dim out while the user hovers or focuses the target, so menus stay readable.
+  const setHover = (on) => ring.classList.toggle('hover', on);
+  el.addEventListener('mouseenter', () => setHover(true));
+  el.addEventListener('mouseleave', () => setHover(false));
+  el.addEventListener('focus', () => setHover(true));
+  el.addEventListener('blur', () => setHover(false));
+
+  const PAD = 6;
+  const BADGE = 24;
+  const BADGE_GAP = 4;
+  const DOCK_ZONE = 160;
   function track() {
     const r = el.getBoundingClientRect();
-    ring.style.left = `${r.left - PAD}px`;
-    ring.style.top = `${r.top - PAD}px`;
-    ring.style.width = `${r.width + PAD * 2}px`;
-    ring.style.height = `${r.height + PAD * 2}px`;
+    const inView = r.bottom > 0 && r.top < window.innerHeight && r.right > 0 && r.left < window.innerWidth;
 
-    const bw = bubble.offsetWidth;
-    const bh = bubble.offsetHeight;
-    const below = r.bottom + PAD + GAP;
-    const top = below + bh <= window.innerHeight ? below : r.top - PAD - GAP - bh;
-    const left = Math.min(Math.max(8, r.left), Math.max(8, window.innerWidth - bw - 8));
-    bubble.style.top = `${top}px`;
-    bubble.style.left = `${left}px`;
+    ring.hidden = badge.hidden = !inView;
+    notice.hidden = inView;
+    if (inView) {
+      ring.style.left = `${r.left - PAD}px`;
+      ring.style.top = `${r.top - PAD}px`;
+      ring.style.width = `${r.width + PAD * 2}px`;
+      ring.style.height = `${r.height + PAD * 2}px`;
+      ring.style.borderRadius = `${cornerRadius(el, r) + 4}px`;
+      // Above the ring's top-left corner, outside it, so it never covers dropdowns opening below.
+      badge.style.left = `${Math.max(4, r.left - PAD)}px`;
+      badge.style.top = `${Math.max(4, r.top - PAD - BADGE - BADGE_GAP)}px`;
+    }
+    // Dock the card at the top when the target sits in the bottom zone of the viewport.
+    card.classList.toggle('top', inView && r.bottom > window.innerHeight - DOCK_ZONE);
 
     rafId = requestAnimationFrame(track);
   }
@@ -131,9 +280,16 @@ function onMessage(message, sender, sendResponse) {
   if (message.type === `guideme${VERSION}:scan`) {
     sendResponse({ elements: scanElements(), title: document.title, url: location.href, version: VERSION });
   } else if (message.type === `guideme${VERSION}:highlight`) {
-    sendResponse({ ok: highlight(message.id, message.instruction) });
+    sendResponse({ ok: highlight(message.id, message.instruction, message.step) });
   } else if (message.type === `guideme${VERSION}:clear`) {
     clearHighlight();
+    hideStatus();
+    sendResponse({ ok: true });
+  } else if (message.type === `guideme${VERSION}:status`) {
+    showStatus(message.text);
+    sendResponse({ ok: true });
+  } else if (message.type === `guideme${VERSION}:hide-status`) {
+    hideStatus();
     sendResponse({ ok: true });
   }
 }
@@ -141,6 +297,7 @@ chrome.runtime.onMessage.addListener(onMessage);
 
 window.__guidemeCleanup = () => {
   clearHighlight();
+  hideStatus();
   chrome.runtime.onMessage.removeListener(onMessage);
 };
 
