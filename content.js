@@ -2,18 +2,37 @@
 // A newer version replaces an older copy already running in the page. Message types carry
 // the version, so a stale copy that is still alive never answers a newer panel.
 (() => {
-const VERSION = 5;
+const VERSION = 13;
 if (window.__guidemeVersion === VERSION) return;
 if (window.__guidemeCleanup) window.__guidemeCleanup();
 window.__guidemeVersion = VERSION;
 
-const MAX_ELEMENTS = 60;
-const MAX_TEXT = 40;
+const MAX_ELEMENTS = 150; // interactive elements + info snippets
+const MAX_INFO = 40;
+const MAX_TEXT = 50;
+const INFO_TEXT = 80; // contact snippets get more room so the full phone/email/address survives
 const SELECTOR = 'button, a, input, select, [role=button]';
 
 let overlayHost = null;
 let pillHost = null;
 let rafId = null;
+
+// Live dropdown guidance state (only used while a session is active).
+let session = null; // { targetId } while a goal session is running
+let knownVisible = new WeakSet(); // nav items that were visible at the last check
+let liveMenu = null; // { items: Element[], menu: string, active: boolean } for the open submenu
+let currentHighlight = null; // { id, instruction, step } from the Navigator
+let highlightedEl = null; // the element the Navigator's ring is on (not a dropdown option)
+let lastClickAt = 0;
+const strippedTargets = new Map(); // link -> its original target attribute, restored when the session ends // when the user last clicked a highlighted element
+let previousHighlight = null; // Navigator highlight saved while a dropdown highlight is shown
+let nextLiveId = 1000;
+const liveIds = new WeakMap();
+let ignoreUntil = 0; // our own menu opening/restoring causes mutations; ignore them briefly
+let observer = null;
+let checkTimer = null;
+let clickWatch = null; // removes the click/change listeners on the highlighted element
+let retryTimer = null;
 
 // Small animated status pill at the top of the page (Shadow DOM, so site CSS can't touch it).
 function showStatus(text) {
@@ -56,56 +75,336 @@ function hideStatus() {
   pillHost = null;
 }
 
-// Visible to the user: styled visible, non-zero size, centre inside the viewport,
-// and not covered by another element (this also excludes elements behind a modal).
-function isVisible(el) {
+// Rendered and non-empty (anywhere on the page, not only in the viewport).
+function isRendered(el) {
   if (el.matches('input[type=hidden]')) return false;
   if (!el.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true })) return false;
   const rect = el.getBoundingClientRect();
-  if (rect.width <= 0 || rect.height <= 0) return false;
+  return rect.width > 0 && rect.height > 0;
+}
+
+function centreInViewport(rect) {
   const cx = rect.left + rect.width / 2;
   const cy = rect.top + rect.height / 2;
-  if (cx < 0 || cy < 0 || cx > window.innerWidth || cy > window.innerHeight) return false;
-  const top = document.elementFromPoint(cx, cy);
-  return !!top && (top === el || el.contains(top) || top.contains(el));
+  return cx >= 0 && cy >= 0 && cx <= window.innerWidth && cy <= window.innerHeight;
+}
+
+// "in view" when the centre is on screen, otherwise "below" or "above" the viewport.
+function viewOf(rect) {
+  if (centreInViewport(rect)) return 'in view';
+  return rect.top + rect.height / 2 < 0 ? 'above' : 'below';
+}
+
+const MODAL_SELECTOR = 'dialog[open], [role=dialog], [role=alertdialog], [aria-modal=true]';
+
+// The open modal that covers the page, if any (the last visible one in DOM order is the topmost).
+function findModal() {
+  const viewportArea = window.innerWidth * window.innerHeight;
+  let modal = null;
+  for (const el of document.querySelectorAll(MODAL_SELECTOR)) {
+    if (!isRendered(el)) continue;
+    const r = el.getBoundingClientRect();
+    const w = Math.min(r.right, window.innerWidth) - Math.max(r.left, 0);
+    const h = Math.min(r.bottom, window.innerHeight) - Math.max(r.top, 0);
+    if (w > 0 && h > 0 && w * h > viewportArea * 0.1) modal = el;
+  }
+  return modal;
+}
+
+// Zone from the closest landmark ancestor, falling back to the position on the page.
+function zoneOf(el, rect) {
+  if (el.closest(MODAL_SELECTOR)) return 'modal';
+  if (el.closest('header, nav, [role=banner], [role=navigation]')) return 'header/nav';
+  if (el.closest('footer, [role=contentinfo]')) return 'footer';
+  const pageTop = rect.top + window.scrollY;
+  const pageHeight = document.documentElement.scrollHeight;
+  if (pageTop < 100) return 'header/nav';
+  if (pageHeight > window.innerHeight * 1.5 && pageTop > pageHeight - 300) return 'footer';
+  return 'main';
+}
+
+// Order: modal, in view, then main, header/nav, footer.
+function rankOf(item) {
+  if (item.zone === 'modal') return 0;
+  if (item.view === 'in view') return 1;
+  return { main: 2, 'header/nav': 3, footer: 4 }[item.zone] ?? 2;
+}
+
+const PHONE_RE = /(?:\+?\d[\d\s().-]{5,}\d)/;
+const EMAIL_RE = /[\w.+-]+@[\w-]+(?:\.[\w-]+)+/;
+const ADDRESS_RE =
+  /\b\d{1,5}[\s,]+[\w.]+(?:\s[\w.]+){0,3}\s(?:street|st|road|rd|avenue|ave|lane|ln|boulevard|blvd|drive|dr|block|sector|campus|highway|hwy)\b|\bP\.?\s?O\.?\s?Box\s+\d+/i;
+
+function contactMatch(text) {
+  const phone = text.match(PHONE_RE);
+  const isYearRange = phone && /^(?:19|20)\d{2}\s*[-–]\s*(?:19|20)\d{2}$/.test(phone[0].trim());
+  if (phone && !isYearRange && phone[0].replace(/\D/g, '').length >= 7) return phone;
+  return text.match(EMAIL_RE) || text.match(ADDRESS_RE);
+}
+
+function snippetAround(text, match, max) {
+  if (text.length <= max) return text;
+  const start = Math.max(0, Math.min(match.index - 15, text.length - max));
+  return text.slice(start, start + max);
+}
+
+// Non-clickable but useful text: contact details (phone, email, address) and h1-h3 headings.
+function collectInfo(scope, taken, limit) {
+  const contacts = [];
+  const headings = [];
+  const seen = new Set();
+  const add = (list, el, text) => {
+    const key = text.toLowerCase();
+    if (!text || seen.has(key) || el.hasAttribute('data-guideme-id') || taken.has(el)) return;
+    seen.add(key);
+    list.push({ el, text });
+  };
+
+  for (const h of scope.querySelectorAll('h1, h2, h3')) {
+    if (headings.length >= limit || !isRendered(h)) continue;
+    add(headings, h, (h.innerText || '').replace(/\s+/g, ' ').trim().slice(0, MAX_TEXT));
+  }
+
+  const walker = document.createTreeWalker(scope, NodeFilter.SHOW_TEXT, {
+    acceptNode: (node) =>
+      /script|style|noscript|textarea/i.test(node.parentElement?.tagName || '') || !node.nodeValue.trim()
+        ? NodeFilter.FILTER_REJECT
+        : NodeFilter.FILTER_ACCEPT,
+  });
+  for (let node = walker.nextNode(); node && contacts.length < limit; node = walker.nextNode()) {
+    const text = node.nodeValue.replace(/\s+/g, ' ').trim();
+    const match = text.length <= 400 && contactMatch(text);
+    const parent = node.parentElement;
+    if (!match || !parent || !isRendered(parent)) continue;
+    if (parent.closest(SELECTOR)) continue; // links and buttons are already in the element list
+    add(contacts, parent, snippetAround(text, match, INFO_TEXT));
+  }
+
+  // Contact details first, then headings, up to the limit.
+  return contacts.concat(headings).slice(0, limit);
+}
+
+const NAV_SELECTOR = 'header, nav, [role=navigation], [role=banner]';
+const VISIBILITY_OPTS = { checkOpacity: true, checkVisibilityCSS: true };
+const MAX_HIDDEN_SCAN = 80; // hidden dropdown items collected per scan
+const MAX_OPTIONS = 15; // <select> option texts sent
+const clip = (s, n) => String(s || '').replace(/\s+/g, ' ').trim().slice(0, n);
+
+// id -> { trigger, menu, text } for hidden dropdown items found by the last scan.
+let hiddenMenus = new Map();
+
+// A hidden link/button under a nav item: returns the visible trigger that opens its submenu.
+// The hidden submenu root is the topmost hidden ancestor; the trigger is a visible sibling of it.
+function findMenuTrigger(el) {
+  let submenu = el;
+  while (
+    submenu.parentElement &&
+    !submenu.parentElement.matches(`${NAV_SELECTOR}, body`) &&
+    !submenu.parentElement.checkVisibility(VISIBILITY_OPTS)
+  ) {
+    submenu = submenu.parentElement;
+  }
+  const label = (node) => clip(node.innerText || node.getAttribute('aria-label') || '', 30);
+  const pick = (parent) => {
+    for (const child of parent.children) {
+      if (child === submenu || child.contains(el) || !isRendered(child) || !label(child)) continue;
+      return child.matches(SELECTOR) ? child : child.querySelector(SELECTOR) || child;
+    }
+    return null;
+  };
+  const parent = submenu.parentElement;
+  if (!parent) return null;
+  let trigger = pick(parent);
+  const li = parent.closest('li');
+  if (!trigger && li && li !== parent) trigger = pick(li);
+  return trigger ? { trigger, menu: label(trigger) } : null;
+}
+
+// Name for a <select>: aria-label, its <label>, the name/id, or a generic word.
+function selectLabel(el) {
+  const label = el.getAttribute('aria-label') || (el.labels && el.labels[0] && el.labels[0].innerText) || el.name || el.id || 'Select';
+  return clip(label, MAX_TEXT);
 }
 
 function scanElements() {
   document.querySelectorAll('[data-guideme-id]').forEach((el) => el.removeAttribute('data-guideme-id'));
+  hiddenMenus = new Map();
 
-  const found = [];
+  const modal = findModal();
+  const scope = modal || document.body;
+  const collected = [];
   const seen = new Set();
-  for (const el of document.querySelectorAll(SELECTOR)) {
-    if (found.length >= MAX_ELEMENTS) break;
-    if (!isVisible(el)) continue;
+  const taken = new Set();
+  const hiddenCandidates = [];
+
+  const keyOf = (el, tag, text, ariaLabel, placeholder) =>
+    `${tag}|${text.toLowerCase()}|${el.getAttribute('href') || ''}|${text ? '' : ariaLabel + '|' + placeholder}`;
+
+  for (const el of scope.querySelectorAll(SELECTOR)) {
+    if (!isRendered(el)) {
+      // Not shown right now: keep links/buttons that live in navigation (possible dropdown items).
+      if (hiddenCandidates.length < MAX_HIDDEN_SCAN && el.closest(NAV_SELECTOR)) hiddenCandidates.push(el);
+      continue;
+    }
+    const rect = el.getBoundingClientRect();
+    const view = viewOf(rect);
+    // On screen, skip anything covered by another element (e.g. a sticky bar or overlay).
+    if (view === 'in view' && !modal) {
+      const top = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
+      if (!top || !(top === el || el.contains(top) || top.contains(el))) continue;
+    }
 
     const tag = el.tagName.toLowerCase();
-    const text = (el.innerText || el.value || '').replace(/\s+/g, ' ').trim().slice(0, MAX_TEXT);
+    const isSelect = tag === 'select';
+    const text = isSelect ? selectLabel(el) : clip(el.innerText || el.value, MAX_TEXT);
     const ariaLabel = el.getAttribute('aria-label') || '';
     const placeholder = el.getAttribute('placeholder') || '';
     if (!text && !ariaLabel && !placeholder) continue;
 
-    const key = `${tag}|${text.toLowerCase()}|${text ? '' : ariaLabel + '|' + placeholder}`;
+    const key = keyOf(el, tag, text, ariaLabel, placeholder);
     if (seen.has(key)) continue;
     seen.add(key);
 
-    const id = String(found.length + 1);
-    el.setAttribute('data-guideme-id', id);
-    found.push({ id, tag, text, ariaLabel, placeholder });
+    const item = { el, tag, text, ariaLabel, placeholder, zone: modal ? 'modal' : zoneOf(el, rect), view, menu: '', options: [] };
+    if (isSelect) {
+      item.options = [...el.options].slice(0, MAX_OPTIONS + 1).map((o) => clip(o.textContent, 30)).filter(Boolean);
+    }
+    item.rank = rankOf(item);
+    collected.push(item);
+    taken.add(el);
   }
-  return found;
+
+  // Hidden dropdown items come after the visible ones, so a visible duplicate always wins the dedupe.
+  for (const el of hiddenCandidates) {
+    const found = findMenuTrigger(el);
+    if (!found) continue;
+    const tag = el.tagName.toLowerCase();
+    const text = clip(el.textContent || el.getAttribute('aria-label'), MAX_TEXT);
+    if (!text) continue;
+    const key = keyOf(el, tag, text, '', '');
+    if (seen.has(key)) continue;
+    seen.add(key);
+
+    const item = { el, tag, text, ariaLabel: '', placeholder: '', zone: modal ? 'modal' : 'header/nav', view: 'hidden', menu: found.menu, options: [] };
+    item.rank = rankOf(item);
+    item.trigger = found.trigger;
+    collected.push(item);
+  }
+
+  const elements = collected.sort((a, b) => a.rank - b.rank).slice(0, MAX_ELEMENTS - MAX_INFO);
+
+  const info = collectInfo(scope, taken, MAX_INFO).map(({ el, text }) => {
+    const rect = el.getBoundingClientRect();
+    const item = { el, tag: 'info', text, ariaLabel: '', placeholder: '', zone: modal ? 'modal' : zoneOf(el, rect), view: viewOf(rect), menu: '', options: [] };
+    item.rank = rankOf(item);
+    return item;
+  });
+
+  const items = elements.concat(info).sort((a, b) => a.rank - b.rank).slice(0, MAX_ELEMENTS);
+  const out = items.map((item, i) => {
+    const id = String(i + 1);
+    item.el.setAttribute('data-guideme-id', id);
+    if (item.trigger) hiddenMenus.set(id, { trigger: item.trigger, menu: item.menu, text: item.text });
+    const { tag, text, ariaLabel, placeholder, zone, view, menu, options } = item;
+    return { id, tag, text, ariaLabel, placeholder, zone, view, menu, menuId: '', options, moreOptions: tag === 'select' && options.length > MAX_OPTIONS };
+  });
+  // Second pass, once every scanned item has its id: a hidden item's menuId is its trigger's id
+  // (the trigger gets a live id if it did not make it into the list).
+  items.forEach((item, i) => {
+    if (item.trigger) out[i].menuId = liveIdOf(item.trigger);
+  });
+  return out;
+}
+
+// --- Dropdown menus: open a hidden submenu, and put everything back when the overlay closes. ---
+const FORCED_PROPS = ['display', 'visibility', 'opacity'];
+let forcedStyles = []; // { node, saved: { prop: [value, priority] } }
+let openedTriggers = []; // elements we sent hover/focus events to
+
+function fireHover(node) {
+  node.dispatchEvent(new MouseEvent('mouseenter', { bubbles: false, cancelable: true, view: window }));
+  node.dispatchEvent(new MouseEvent('mouseover', { bubbles: true, cancelable: true, view: window }));
+}
+
+function fireLeave(node) {
+  node.dispatchEvent(new MouseEvent('mouseleave', { bubbles: false, cancelable: true, view: window }));
+  node.dispatchEvent(new MouseEvent('mouseout', { bubbles: true, cancelable: true, view: window }));
+}
+
+// Simulates hovering and focusing the trigger (and its parent li) so the site's own script opens the menu.
+function openMenuEvents(trigger) {
+  const targets = [trigger, trigger.closest('li')].filter(Boolean);
+  for (const node of targets) fireHover(node);
+  try {
+    trigger.focus({ preventScroll: true });
+  } catch {}
+  trigger.dispatchEvent(new FocusEvent('focusin', { bubbles: true }));
+  openedTriggers = targets;
+}
+
+// Last resort: show the hidden ancestors of `el` with inline styles, remembering the originals.
+function forceVisible(el, stopAt) {
+  for (let node = el; node && node !== stopAt && node !== document.body; node = node.parentElement) {
+    const cs = getComputedStyle(node);
+    if (cs.display !== 'none' && cs.visibility !== 'hidden' && cs.opacity !== '0') continue;
+    const saved = {};
+    for (const prop of FORCED_PROPS) saved[prop] = [node.style.getPropertyValue(prop), node.style.getPropertyPriority(prop)];
+    forcedStyles.push({ node, saved });
+    node.style.setProperty('display', 'block', 'important');
+    node.style.setProperty('visibility', 'visible', 'important');
+    node.style.setProperty('opacity', '1', 'important');
+  }
+}
+
+function restoreMenu() {
+  if (forcedStyles.length > 0 || openedTriggers.length > 0) ignoreUntil = Date.now() + 400;
+  for (const { node, saved } of forcedStyles.reverse()) {
+    for (const prop of FORCED_PROPS) {
+      const [value, priority] = saved[prop];
+      if (value) node.style.setProperty(prop, value, priority);
+      else node.style.removeProperty(prop);
+    }
+  }
+  forcedStyles = [];
+  for (const node of openedTriggers) fireLeave(node);
+  openedTriggers = [];
+}
+
+const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const shown = (el) => isRendered(el);
+
+// Makes a hidden dropdown item visible. Resolves true if it is visible afterwards.
+async function openMenuFor(el, trigger) {
+  ignoreUntil = Date.now() + 1000;
+  openMenuEvents(trigger);
+  await wait(300);
+  if (shown(el)) return true;
+  forceVisible(el, trigger.closest('li') || trigger.parentElement);
+  await wait(50);
+  return shown(el);
 }
 
 function clearHighlight() {
   if (rafId !== null) cancelAnimationFrame(rafId);
   rafId = null;
   document.removeEventListener('keydown', onKeydown, true);
+  stopWatchingClicks();
   if (overlayHost) overlayHost.remove();
   overlayHost = null;
+  restoreMenu();
+}
+
+// The user (or the panel) closed the overlay: forget any highlight we would otherwise restore.
+function dismissOverlay() {
+  currentHighlight = null;
+  highlightedEl = null;
+  previousHighlight = null;
+  if (liveMenu) liveMenu.active = false;
+  clearHighlight();
 }
 
 function onKeydown(e) {
-  if (e.key === 'Escape') clearHighlight();
+  if (e.key === 'Escape') dismissOverlay();
 }
 
 // Corner radius of the element in px (percentages resolve against the smaller side).
@@ -195,6 +494,17 @@ const OVERLAY_CSS = `
     cursor: pointer;
   }
   .close:hover { background: #f3f4f6; color: #111827; }
+  .step.error { color: #dc2626; }
+  .retry {
+    margin-top: 10px;
+    padding: 6px 14px;
+    border: 0;
+    border-radius: 8px;
+    background: #10b981;
+    color: #fff;
+    font: 600 14px system-ui, sans-serif;
+    cursor: pointer;
+  }
   [hidden] { display: none !important; }
   @media (prefers-reduced-motion: reduce) {
     .ring, .card { transition: none; animation: none; }
@@ -202,11 +512,31 @@ const OVERLAY_CSS = `
   }
 `;
 
-function highlight(id, instruction, step) {
+// Resolves to { ok, instruction } where instruction is what the card actually shows.
+async function highlight(id, instruction, step, live = false) {
   clearHighlight();
   hideStatus();
-  const el = document.querySelector(`[data-guideme-id="${id}"]`);
-  if (!el) return false;
+  let el = document.querySelector(`[data-guideme-id="${id}"]`);
+  if (!el) return { ok: false, instruction };
+  // Remember the Navigator's highlight so it can come back when a dropdown highlight closes.
+  if (!live) {
+    currentHighlight = { id, instruction, step };
+    previousHighlight = null;
+    if (liveMenu) liveMenu.active = false; // a fresh Navigator step replaces any dropdown highlight
+  }
+
+  // A hidden dropdown item: open its menu first, with a plain wording the user can follow.
+  const hidden = hiddenMenus.get(String(id));
+  if (hidden && !shown(el)) {
+    if (await openMenuFor(el, hidden.trigger)) {
+      instruction = `Under ${hidden.menu}, click '${hidden.text}'`;
+    } else {
+      // The menu would not open: point at the visible trigger instead.
+      restoreMenu();
+      el = hidden.trigger;
+      instruction = `Hover ${hidden.menu}, then click '${hidden.text}'`;
+    }
+  }
 
   el.scrollIntoView({ behavior: 'smooth', block: 'center' });
 
@@ -236,7 +566,7 @@ function highlight(id, instruction, step) {
   shadow.querySelector('.text').textContent = instruction;
   // Right-to-left scripts (Urdu, Arabic, Hebrew) flip the card.
   card.dir = /[֐-ࣿ]/.test(instruction) ? 'rtl' : 'ltr';
-  shadow.querySelector('.close').addEventListener('click', clearHighlight);
+  shadow.querySelector('.close').addEventListener('click', dismissOverlay);
   document.documentElement.appendChild(overlayHost);
   document.addEventListener('keydown', onKeydown, true);
 
@@ -251,13 +581,27 @@ function highlight(id, instruction, step) {
   const BADGE = 24;
   const BADGE_GAP = 4;
   const DOCK_ZONE = 160;
+  // Scroll first, then draw: the ring and badge stay hidden until the smooth scroll has settled
+  // (the element's position stops changing), so footer items never flash in the wrong place.
+  const startedAt = performance.now();
+  let lastTop = null;
+  let lastLeft = null;
+  let lastMoved = startedAt;
+  let settled = false;
   function track() {
     const r = el.getBoundingClientRect();
-    const inView = r.bottom > 0 && r.top < window.innerHeight && r.right > 0 && r.left < window.innerWidth;
+    const now = performance.now();
+    if (r.top !== lastTop || r.left !== lastLeft) lastMoved = now;
+    lastTop = r.top;
+    lastLeft = r.left;
+    if (!settled && (now - lastMoved > 150 || now - startedAt > 2500)) settled = true;
 
-    ring.hidden = badge.hidden = !inView;
-    notice.hidden = inView;
-    if (inView) {
+    const inView = r.bottom > 0 && r.top < window.innerHeight && r.right > 0 && r.left < window.innerWidth;
+    const showRing = settled && inView;
+
+    ring.hidden = badge.hidden = !showRing;
+    notice.hidden = !settled || inView;
+    if (showRing) {
       ring.style.left = `${r.left - PAD}px`;
       ring.style.top = `${r.top - PAD}px`;
       ring.style.width = `${r.width + PAD * 2}px`;
@@ -273,18 +617,371 @@ function highlight(id, instruction, step) {
     rafId = requestAnimationFrame(track);
   }
   track();
-  return true;
+  openInSameTab(el);
+  watchClicks(el);
+  if (!live) highlightedEl = el;
+  // Menus we opened or forced are not "new" dropdowns for the watcher.
+  ignoreUntil = Date.now() + 400;
+  snapshotVisible();
+  return { ok: true, instruction };
+}
+
+// --- Live dropdown guidance: while a session is active, notice submenus the user opens. ---
+const CHECK_DEBOUNCE_MS = 250;
+const MAX_NAV_ITEMS = 600;
+
+const navItems = () =>
+  [...document.querySelectorAll(SELECTOR)].filter((el) => el.closest(NAV_SELECTOR)).slice(0, MAX_NAV_ITEMS);
+
+const labelOf = (node) => clip(node.innerText || node.textContent || node.getAttribute('aria-label') || '', 30);
+
+// Remember which nav items are visible right now, so later checks can spot ones that just appeared.
+function snapshotVisible() {
+  knownVisible = new WeakSet();
+  if (!session) return;
+  for (const el of navItems()) if (isRendered(el)) knownVisible.add(el);
+}
+
+// Given an item that just became visible, find the submenu it belongs to and the trigger that opened it:
+// the trigger is a sibling (at some ancestor level) that was already visible before.
+function findOpenedSubmenu(item, wasKnown) {
+  for (let node = item; node.parentElement && node !== document.body; node = node.parentElement) {
+    for (const sibling of node.parentElement.children) {
+      if (sibling === node || sibling.contains(item)) continue;
+      const trigger = sibling.matches(SELECTOR) ? sibling : sibling.querySelector(SELECTOR);
+      if (trigger && wasKnown.has(trigger) && isRendered(trigger) && labelOf(trigger)) {
+        return { root: node, trigger, menu: labelOf(trigger) };
+      }
+    }
+  }
+  return null;
+}
+
+// Every item gets an id the panel can refer to: its scan id if it has one, otherwise a stable live id.
+function liveIdOf(el) {
+  const existing = el.getAttribute('data-guideme-id');
+  if (existing) return existing;
+  if (!liveIds.has(el)) liveIds.set(el, String(nextLiveId++));
+  const id = liveIds.get(el);
+  el.setAttribute('data-guideme-id', id);
+  return id;
+}
+
+function describeItem(el) {
+  return {
+    id: liveIdOf(el),
+    tag: el.tagName.toLowerCase(),
+    text: clip(el.innerText || el.value || el.getAttribute('aria-label'), MAX_TEXT),
+    ariaLabel: el.getAttribute('aria-label') || '',
+    placeholder: el.getAttribute('placeholder') || '',
+    zone: 'header/nav',
+    view: 'in view',
+    menu: '',
+    options: [],
+  };
+}
+
+function tellPanel(payload) {
+  chrome.runtime
+    .sendMessage({ ...payload, title: document.title, url: location.href, type: `guideme${VERSION}:dropdown` })
+    .catch(() => {});
+}
+
+// Step numbers follow the panel's session.step. Opening the submenu of the step's target (its trigger)
+// completes that step, so the option shows the next one.
+function tellStep(from, to) {
+  chrome.runtime.sendMessage({ type: `guideme${VERSION}:step`, from, to }).catch(() => {});
+}
+
+// Is the Navigator's ring on the trigger of the submenu that is open now?
+function targetIsTriggerOfOpenMenu() {
+  const trigger = liveMenu && liveMenu.trigger;
+  return !!(trigger && highlightedEl && (highlightedEl === trigger || trigger.contains(highlightedEl) || highlightedEl.contains(trigger)));
+}
+
+// Put the ring on a dropdown option. The Navigator's own highlight is saved and comes back on close.
+function showLiveHighlight(id, instruction) {
+  if (!previousHighlight && currentHighlight) previousHighlight = currentHighlight;
+  if (liveMenu) liveMenu.active = true;
+  // Advance once per opened menu: re-hovering the same menu (still open) never counts again.
+  if (liveMenu && !liveMenu.advanced && targetIsTriggerOfOpenMenu()) {
+    liveMenu.advanced = true;
+    liveMenu.fromStep = session.step;
+    session.step += 1;
+    tellStep(liveMenu.fromStep, session.step);
+  }
+  // Any other menu (e.g. a prefetched pick on a menu that was not the target) keeps the current step.
+  return highlight(id, instruction, session.step, true);
+}
+
+// The submenu closed: drop the dropdown ring and bring back the previous highlight, if any.
+function closeLiveMenu() {
+  const menu = liveMenu;
+  liveMenu = null;
+  if (!menu || !menu.active) return;
+  // Closed without the option being clicked: go back a step (a click ends the step for good).
+  if (menu.advanced && Date.now() - lastClickAt > 2000) {
+    session.step = menu.fromStep;
+    tellStep(menu.fromStep + 1, menu.fromStep);
+  }
+  const previous = previousHighlight;
+  previousHighlight = null;
+  clearHighlight();
+  if (previous) highlight(previous.id, previous.instruction, session.step);
+}
+
+function checkDropdowns() {
+  if (!session) return;
+  if (Date.now() < ignoreUntil) {
+    scheduleCheck();
+    return;
+  }
+
+  // 1. Has the open submenu closed?
+  if (liveMenu && !liveMenu.items.some((el) => el.isConnected && isRendered(el))) closeLiveMenu();
+
+  // 2. Did a new submenu open?
+  const wasKnown = knownVisible;
+  const fresh = navItems().filter((el) => isRendered(el) && !wasKnown.has(el));
+  snapshotVisible();
+  if (fresh.length === 0) return;
+
+  const found = findOpenedSubmenu(fresh[0], wasKnown);
+  if (!found) return;
+  const submenuItems = [...found.root.querySelectorAll(SELECTOR)].filter((el) => isRendered(el) && labelOf(el));
+  if (submenuItems.length === 0) return;
+  if (liveMenu && liveMenu.root === found.root) return; // same menu, already handled
+
+  // Were these items part of the Start scan (scan ids are below 1000)? If not, they loaded lazily.
+  const inScan = submenuItems.some((el) => Number(el.getAttribute('data-guideme-id')) > 0 && Number(el.getAttribute('data-guideme-id')) < 1000);
+  const items = submenuItems.map(describeItem);
+  liveMenu = { items: submenuItems, menu: found.menu, root: found.root, trigger: found.trigger, active: false, advanced: false, fromStep: 0 };
+
+  // 2a. The Navigator's target is inside this submenu: highlight it now, no API call.
+  const target = session.targetId && items.find((item) => item.id === session.targetId);
+  if (target) {
+    showLiveHighlight(target.id, `Under ${found.menu}, click '${target.text}'`);
+    tellPanel({ parent: found.menu, handled: true, item: target.text });
+    return;
+  }
+
+  // 2b. The first Gemma call already picked the best item of this menu (menuPicks): highlight it, no API call.
+  const pick = session.menuPicks.find((p) => items.some((item) => item.id === p.itemId));
+  if (pick) {
+    const picked = items.find((item) => item.id === pick.itemId);
+    showLiveHighlight(picked.id, `Under ${found.menu}, click '${picked.text}'`);
+    tellPanel({ parent: found.menu, handled: true, prefetched: true, item: picked.text });
+    return;
+  }
+
+  // 2c. Its items were in the Start scan but nothing in them fits the goal: nothing to show.
+  if (inScan) {
+    tellPanel({ parent: found.menu, handled: true, skipped: true });
+    return;
+  }
+
+  // 2d. Lazily loaded menu: the panel asks Gemma about just these items and replies with 'live-highlight'.
+  tellPanel({ parent: found.menu, handled: false, items });
+}
+
+function scheduleCheck(withRetry = false) {
+  clearTimeout(checkTimer);
+  checkTimer = setTimeout(checkDropdowns, CHECK_DEBOUNCE_MS);
+  // Pure-CSS menus open without any DOM change, so look once more after the transition.
+  if (withRetry) {
+    clearTimeout(retryTimer);
+    retryTimer = setTimeout(checkDropdowns, CHECK_DEBOUNCE_MS + 350);
+  }
+}
+
+function onNavEvent(e) {
+  if (!session) return;
+  const target = e.target;
+  const inNav = target && target.closest && target.closest(NAV_SELECTOR);
+  if (inNav || liveMenu) scheduleCheck(e.type === 'mouseover' || e.type === 'focusin');
+}
+
+function onMutations(records) {
+  if (!session || Date.now() < ignoreUntil) return;
+  if (records.some((r) => r.target.nodeType === 1 && r.target.closest(NAV_SELECTOR))) scheduleCheck();
+}
+
+const NAV_EVENTS = ['mouseover', 'focusin', 'mouseout', 'focusout'];
+
+function setSession(active, targetId, menuPicks, step) {
+  if (!active) {
+    session = null;
+    liveMenu = null;
+    previousHighlight = null;
+    restoreTargets();
+    if (observer) observer.disconnect();
+    observer = null;
+    clearTimeout(checkTimer);
+    clearTimeout(retryTimer);
+    NAV_EVENTS.forEach((type) => document.removeEventListener(type, onNavEvent, true));
+    return;
+  }
+  const wasActive = !!session;
+  session = { targetId: targetId || null, menuPicks: Array.isArray(menuPicks) ? menuPicks : [], step: step || 1 };
+  if (wasActive) return; // already watching; only the target and picks changed
+  snapshotVisible();
+  NAV_EVENTS.forEach((type) => document.addEventListener(type, onNavEvent, true));
+  observer = new MutationObserver(onMutations);
+  observer.observe(document.documentElement, {
+    subtree: true,
+    childList: true,
+    attributes: true,
+    attributeFilter: ['style', 'class', 'hidden', 'aria-expanded', 'aria-hidden', 'open'],
+  });
+}
+
+// --- Links that open a new tab would take the user out of the session's tab. ---
+const linkOf = (el) => (el.tagName === 'A' ? el : el.closest('a'));
+const opensNewTab = (link) => String(link.getAttribute('target') || '').toLowerCase() === '_blank';
+
+// While a session is active, take target="_blank" off the highlighted link (original remembered).
+function openInSameTab(el) {
+  const link = session && linkOf(el);
+  if (!link || !opensNewTab(link) || strippedTargets.has(link)) return;
+  strippedTargets.set(link, link.getAttribute('target'));
+  link.removeAttribute('target');
+}
+
+function restoreTargets() {
+  for (const [link, target] of strippedTargets) link.setAttribute('target', target);
+  strippedTargets.clear();
+}
+
+// Safety net: if the clicked link still has target="_blank", open it in this tab ourselves.
+function keepInSameTab(e, el) {
+  const link = linkOf(el) || (e.target.closest && e.target.closest('a'));
+  if (!link || !opensNewTab(link) || !link.href) return;
+  // Leave deliberate "open elsewhere" clicks alone (ctrl/cmd/shift/middle click) and downloads.
+  if (e.ctrlKey || e.metaKey || e.shiftKey || e.altKey || e.button !== 0 || link.hasAttribute('download')) return;
+  if (!/^https?:$/.test(link.protocol)) return;
+  e.preventDefault();
+  console.log('[GuideMe] Opening in same tab');
+  chrome.runtime.sendMessage({ type: `guideme${VERSION}:log`, text: 'Opening in same tab' }).catch(() => {});
+  window.location.href = link.href;
+}
+
+// --- Reporting the user's click on the highlighted element, before the page can change. ---
+function stopWatchingClicks() {
+  if (clickWatch) clickWatch();
+  clickWatch = null;
+}
+
+// Tells the panel once when the user clicks the highlighted element (or changes it, for a select).
+function watchClicks(el) {
+  stopWatchingClicks();
+  if (el.tagName === 'SELECT') {
+    const onChange = () => report(`Chose '${clip(el.selectedOptions[0] && el.selectedOptions[0].textContent, 40)}'`);
+    el.addEventListener('change', onChange);
+    clickWatch = () => el.removeEventListener('change', onChange);
+    return;
+  }
+  if (!el.matches(SELECTOR)) return; // info snippets are not clickable
+  const onClick = (e) => {
+    if (e.target instanceof Node && (el === e.target || el.contains(e.target))) {
+      report(clip(el.innerText || el.value || el.getAttribute('aria-label'), 40));
+      keepInSameTab(e, el);
+    }
+  };
+  document.addEventListener('click', onClick, true);
+  clickWatch = () => document.removeEventListener('click', onClick, true);
+
+  function report(text) {
+    stopWatchingClicks();
+    lastClickAt = Date.now();
+    chrome.runtime
+      .sendMessage({ type: `guideme${VERSION}:clicked`, text, url: location.href })
+      .catch(() => {});
+  }
+}
+
+// Final "All done!" card: no ring, just the card (Esc or the close button removes it).
+function showDoneCard(text) {
+  clearHighlight();
+  hideStatus();
+  currentHighlight = null;
+  previousHighlight = null;
+  overlayHost = document.createElement('div');
+  overlayHost.id = 'guideme-overlay';
+  overlayHost.style.cssText = 'position:fixed;inset:0;pointer-events:none;z-index:2147483647;';
+  const shadow = overlayHost.attachShadow({ mode: 'open' });
+  shadow.innerHTML = `
+    <style>${OVERLAY_CSS}</style>
+    <div class="card" role="status">
+      <div class="step"></div>
+      <div class="text"></div>
+      <div class="footer">GuideMe</div>
+      <button class="close" type="button" aria-label="Close">×</button>
+    </div>`;
+  const card = shadow.querySelector('.card');
+  shadow.querySelector('.step').textContent = 'All done!';
+  shadow.querySelector('.text').textContent = text;
+  card.dir = /[֐-ࣿ]/.test(text) ? 'rtl' : 'ltr';
+  shadow.querySelector('.close').addEventListener('click', dismissOverlay);
+  document.documentElement.appendChild(overlayHost);
+  document.addEventListener('keydown', onKeydown, true);
+}
+
+// A failed step: the card explains it and offers Retry, which resumes from the current step.
+function showErrorCard(text) {
+  clearHighlight();
+  hideStatus();
+  currentHighlight = null;
+  previousHighlight = null;
+  overlayHost = document.createElement('div');
+  overlayHost.id = 'guideme-overlay';
+  overlayHost.style.cssText = 'position:fixed;inset:0;pointer-events:none;z-index:2147483647;';
+  const shadow = overlayHost.attachShadow({ mode: 'open' });
+  shadow.innerHTML = `
+    <style>${OVERLAY_CSS}</style>
+    <div class="card" role="alert">
+      <div class="step error">Something went wrong</div>
+      <div class="text"></div>
+      <button class="retry" type="button">Retry</button>
+      <div class="footer">GuideMe</div>
+      <button class="close" type="button" aria-label="Close">×</button>
+    </div>`;
+  shadow.querySelector('.text').textContent = text;
+  shadow.querySelector('.close').addEventListener('click', dismissOverlay);
+  shadow.querySelector('.retry').addEventListener('click', () => {
+    dismissOverlay();
+    chrome.runtime.sendMessage({ type: `guideme${VERSION}:retry` }).catch(() => {});
+  });
+  document.documentElement.appendChild(overlayHost);
+  document.addEventListener('keydown', onKeydown, true);
 }
 
 function onMessage(message, sender, sendResponse) {
   if (message.type === `guideme${VERSION}:scan`) {
     sendResponse({ elements: scanElements(), title: document.title, url: location.href, version: VERSION });
   } else if (message.type === `guideme${VERSION}:highlight`) {
-    sendResponse({ ok: highlight(message.id, message.instruction, message.step) });
+    highlight(message.id, message.instruction, message.step)
+      .then(sendResponse)
+      .catch((err) => sendResponse({ ok: false, instruction: message.instruction, error: String(err && err.message) }));
+    return true; // the reply is sent after the menu has been opened
   } else if (message.type === `guideme${VERSION}:clear`) {
-    clearHighlight();
+    dismissOverlay();
     hideStatus();
     sendResponse({ ok: true });
+  } else if (message.type === `guideme${VERSION}:done`) {
+    showDoneCard(message.text);
+    sendResponse({ ok: true });
+  } else if (message.type === `guideme${VERSION}:error`) {
+    showErrorCard(message.text);
+    sendResponse({ ok: true });
+  } else if (message.type === `guideme${VERSION}:session`) {
+    setSession(message.active, message.targetId, message.menuPicks, message.step);
+    sendResponse({ ok: true });
+  } else if (message.type === `guideme${VERSION}:live-highlight`) {
+    // The panel picked an item from the dropdown that is open now.
+    const el = document.querySelector('[data-guideme-id="' + message.id + '"]');
+    const stillOpen = el && liveMenu && liveMenu.items.includes(el) && isRendered(el);
+    if (stillOpen) showLiveHighlight(message.id, message.instruction);
+    sendResponse({ ok: !!stillOpen });
   } else if (message.type === `guideme${VERSION}:status`) {
     showStatus(message.text);
     sendResponse({ ok: true });
@@ -296,6 +993,7 @@ function onMessage(message, sender, sendResponse) {
 chrome.runtime.onMessage.addListener(onMessage);
 
 window.__guidemeCleanup = () => {
+  setSession(false);
   clearHighlight();
   hideStatus();
   chrome.runtime.onMessage.removeListener(onMessage);
