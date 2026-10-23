@@ -3,238 +3,783 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>GuideMe: Set up in 3 minutes</title>
-  <meta name="description" content="GuideMe is an open-source Chrome extension that shows you where to click, step by step, on any website. Download it and set it up in three minutes.">
+  <title>GuideMe – Show me where to click</title>
+  <meta name="description" content="GuideMe is a free, open-source Chrome extension that guides you through any website one click at a time, in English, Urdu or Roman Urdu. It points, you click, you learn.">
+  <meta name="theme-color" content="#10b981">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="GuideMe – Show me where to click">
+  <meta property="og:description" content="A free, open-source Chrome extension that points at the next thing to click on any website, in English or Urdu. Powered by Gemma 4.">
+  <meta property="og:url" content="https://huzaifa282.github.io/GuideMe/">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="GuideMe – Show me where to click">
+  <meta name="twitter:description" content="A free, open-source Chrome extension that guides you through any website one click at a time.">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 128 128'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%2334d399'/%3E%3Cstop offset='.55' stop-color='%2310b981'/%3E%3Cstop offset='1' stop-color='%23047857'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect x='4' y='4' width='120' height='120' rx='30' fill='url(%23g)'/%3E%3Ccircle cx='54' cy='52' r='27' fill='none' stroke='%23fff' stroke-width='10'/%3E%3Ccircle cx='54' cy='52' r='9' fill='%23fff' opacity='.9'/%3E%3Cpath d='M60 58 L60 108 L72.5 96 L82 116 L92 111.5 L82.5 92 L100 92 Z' fill='%23fff' stroke='%23065f46' stroke-width='6' stroke-linejoin='round'/%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Nastaliq+Urdu:wght@400;600&display=swap" rel="stylesheet">
   <style>
     :root {
       --bg: #ffffff;
-      --surface: #f6f8f7;
-      --text: #111827;
-      --muted: #4b5563;
-      --border: #d9e0dd;
-      --accent: #059669;
+      --bg-alt: #f4f8f6;
+      --surface: #ffffff;
+      --text: #0f1a16;
+      --muted: #52625b;
+      --border: #dde6e2;
+      --accent: #10b981;
       --accent-strong: #047857;
-      --on-accent: #ffffff;
-      --code-bg: #eef2f0;
+      --accent-soft: #e5f7ef;
+      --on-accent: #04130d;
+      --indigo: #6366f1;
+      --indigo-soft: #eef0ff;
+      --code-bg: #eaf0ed;
+      --shadow: 0 1px 2px rgba(15, 26, 22, .06), 0 12px 32px -8px rgba(15, 26, 22, .16);
+      --glow: rgba(16, 185, 129, .22);
+      --nav-bg: rgba(255, 255, 255, .8);
+      --dim: rgba(15, 26, 22, .46);
     }
     @media (prefers-color-scheme: dark) {
-      :root {
-        --bg: #0f1412;
-        --surface: #17201c;
-        --text: #f3f4f6;
-        --muted: #a7b3ad;
-        --border: #2a3731;
+      :root:not([data-theme="light"]) {
+        --bg: #0b1210;
+        --bg-alt: #101a17;
+        --surface: #15201c;
+        --text: #eef4f1;
+        --muted: #9db0a8;
+        --border: #25342e;
         --accent: #10b981;
         --accent-strong: #34d399;
+        --accent-soft: #11332a;
         --on-accent: #04130d;
-        --code-bg: #1f2a25;
+        --indigo: #a5b4fc;
+        --indigo-soft: #1d2140;
+        --code-bg: #1c2a25;
+        --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 16px 40px -8px rgba(0, 0, 0, .6);
+        --glow: rgba(16, 185, 129, .28);
+        --nav-bg: rgba(11, 18, 16, .8);
+        --dim: rgba(0, 0, 0, .55);
       }
     }
     * { box-sizing: border-box; }
-    html { -webkit-text-size-adjust: 100%; }
+    html { scroll-behavior: smooth; scroll-padding-top: 84px; -webkit-text-size-adjust: 100%; }
     body {
       margin: 0;
       background: var(--bg);
       color: var(--text);
-      font: 16px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      font: 16px/1.65 Inter, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      overflow-x: hidden;
     }
-    main { max-width: 720px; margin: 0 auto; padding: 32px 16px 64px; }
-    h1 { font-size: clamp(1.9rem, 6vw, 2.6rem); line-height: 1.15; margin: 0 0 8px; }
-    h2 { font-size: 1.3rem; margin: 40px 0 12px; }
-    p { margin: 0 0 12px; }
+    img, svg { display: block; max-width: 100%; }
     a { color: var(--accent-strong); }
-    .lead { font-size: 1.15rem; color: var(--muted); max-width: 40em; }
-    .badge {
-      display: inline-block;
-      margin-bottom: 12px;
-      padding: 2px 10px;
-      border-radius: 999px;
-      background: var(--surface);
-      border: 1px solid var(--border);
-      color: var(--muted);
-      font-size: 0.85rem;
+    h1, h2, h3, p { margin: 0; }
+    .wrap { width: 100%; max-width: 1120px; margin: 0 auto; padding: 0 16px; }
+    section { padding: 88px 0; }
+    .alt { background: var(--bg-alt); }
+    .eyebrow {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 6px 14px; border-radius: 999px;
+      background: var(--accent-soft); color: var(--accent-strong);
+      border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
+      font-size: .82rem; font-weight: 600;
     }
-    .actions { display: flex; flex-wrap: wrap; gap: 12px; margin: 24px 0 8px; }
+    .eyebrow .pip { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); }
+    .sec-head { max-width: 640px; margin: 0 auto 48px; text-align: center; }
+    .sec-head h2 { font-size: clamp(1.7rem, 4vw, 2.4rem); line-height: 1.2; letter-spacing: -.02em; font-weight: 800; margin: 14px 0 12px; }
+    .sec-head p { color: var(--muted); font-size: 1.05rem; }
+
+    /* buttons */
     .btn {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      min-height: 48px;
-      padding: 0 22px;
-      border-radius: 12px;
-      border: 1px solid var(--border);
-      background: var(--surface);
-      color: var(--text);
-      font: inherit;
-      font-weight: 600;
-      text-decoration: none;
-      cursor: pointer;
+      display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+      min-height: 48px; padding: 0 22px; border-radius: 12px;
+      border: 1px solid var(--border); background: var(--surface); color: var(--text);
+      font: inherit; font-weight: 600; text-decoration: none; cursor: pointer;
+      transition: transform .15s, box-shadow .15s, background .15s;
     }
-    .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
-    .btn:hover { filter: brightness(1.05); }
-    .btn:focus-visible, a:focus-visible { outline: 3px solid var(--accent-strong); outline-offset: 2px; }
-    .small { font-size: 0.9rem; color: var(--muted); }
-    ol.steps { list-style: none; counter-reset: step; padding: 0; margin: 0; }
-    ol.steps li {
-      counter-increment: step;
-      position: relative;
-      margin: 0 0 14px;
-      padding: 16px 16px 16px 60px;
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 14px;
+    .btn:hover { transform: translateY(-1px); box-shadow: var(--shadow); }
+    .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); box-shadow: 0 8px 24px -8px var(--glow); }
+    .btn.primary:hover { background: color-mix(in srgb, var(--accent) 88%, white); }
+    .btn.sm { min-height: 38px; padding: 0 14px; font-size: .9rem; border-radius: 10px; }
+    .btn svg { width: 18px; height: 18px; }
+    .btn:focus-visible, a:focus-visible, button:focus-visible, summary:focus-visible { outline: 3px solid var(--accent-strong); outline-offset: 2px; }
+
+    /* nav */
+    .nav {
+      position: sticky; top: 0; z-index: 50;
+      background: var(--nav-bg); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+      border-bottom: 1px solid var(--border);
     }
-    ol.steps li::before {
-      content: counter(step);
-      position: absolute;
-      left: 16px;
-      top: 16px;
-      width: 30px;
-      height: 30px;
-      border-radius: 50%;
-      background: var(--accent);
-      color: var(--on-accent);
-      font-weight: 700;
-      line-height: 30px;
-      text-align: center;
+    .nav .wrap { display: flex; align-items: center; justify-content: space-between; height: 64px; gap: 16px; }
+    .brand { display: flex; align-items: center; gap: 10px; font-weight: 800; font-size: 1.15rem; letter-spacing: -.02em; color: var(--text); text-decoration: none; }
+    .brand svg { width: 32px; height: 32px; }
+    .links { display: flex; gap: 28px; }
+    .links a { color: var(--muted); font-weight: 500; font-size: .95rem; text-decoration: none; }
+    .links a:hover { color: var(--text); }
+    .nav-cta { display: flex; gap: 10px; align-items: center; }
+
+    /* hero */
+    .hero { padding: 72px 0 96px; position: relative; overflow: hidden; }
+    .hero::before {
+      content: ""; position: absolute; inset: -20% -10% auto auto; width: 720px; height: 720px;
+      background: radial-gradient(closest-side, var(--glow), transparent 70%); pointer-events: none;
     }
-    ol.steps h3 { margin: 0 0 4px; font-size: 1.05rem; }
-    ol.steps p { margin: 0 0 8px; color: var(--muted); }
-    ol.steps .row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 8px; }
-    code {
-      padding: 2px 6px;
-      border-radius: 6px;
-      background: var(--code-bg);
-      font: 0.92em ui-monospace, Consolas, monospace;
-      overflow-wrap: anywhere;
+    .hero .wrap { display: grid; grid-template-columns: 1fr 1.05fr; gap: 56px; align-items: center; position: relative; }
+    .hero .wrap > * { min-width: 0; }
+    .hero h1 { font-size: clamp(2.5rem, 6vw, 4rem); line-height: 1.05; letter-spacing: -.035em; font-weight: 800; margin: 20px 0 20px; }
+    .hero h1 em {
+      font-style: normal;
+      background: linear-gradient(120deg, var(--accent-strong), var(--accent) 60%, #22d3ee);
+      -webkit-background-clip: text; background-clip: text; color: transparent;
     }
-    .demo {
-      display: grid;
-      place-items: center;
-      min-height: 160px;
-      padding: 16px;
-      border: 2px dashed var(--border);
-      border-radius: 14px;
-      color: var(--muted);
-      text-align: center;
+    .hero .lead { font-size: 1.15rem; color: var(--muted); max-width: 34em; }
+    .actions { display: flex; flex-wrap: wrap; gap: 12px; margin: 32px 0 20px; }
+    .trust { display: flex; flex-wrap: wrap; gap: 8px 20px; padding: 0; margin: 0; list-style: none; color: var(--muted); font-size: .9rem; }
+    .trust li { display: flex; align-items: center; gap: 6px; }
+    .trust svg { width: 16px; height: 16px; color: var(--accent); flex: none; }
+    .req { margin-top: 14px; font-size: .85rem; color: var(--muted); }
+
+    /* demo */
+    .demo { position: relative; }
+    .langs { display: flex; gap: 6px; justify-content: center; margin-bottom: 14px; }
+    .langs button {
+      font: inherit; font-size: .85rem; font-weight: 600; cursor: pointer;
+      padding: 6px 14px; border-radius: 999px; border: 1px solid var(--border);
+      background: var(--surface); color: var(--muted);
     }
-    details { margin: 0 0 10px; padding: 12px 16px; border: 1px solid var(--border); border-radius: 12px; }
-    summary { cursor: pointer; font-weight: 600; }
-    details p { margin: 8px 0 0; color: var(--muted); }
-    footer { margin-top: 48px; padding-top: 16px; border-top: 1px solid var(--border); }
+    .langs button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+    .window {
+      border: 1px solid var(--border); border-radius: 16px; background: var(--surface);
+      box-shadow: var(--shadow); overflow: hidden;
+    }
+    .bar { display: flex; align-items: center; gap: 8px; padding: 10px 14px; background: var(--bg-alt); border-bottom: 1px solid var(--border); }
+    .bar i { width: 10px; height: 10px; border-radius: 50%; background: var(--border); }
+    .bar .url { flex: 1; margin-left: 8px; padding: 4px 12px; border-radius: 8px; background: var(--surface); border: 1px solid var(--border); color: var(--muted); font-size: .75rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .bar .ext { width: 18px; height: 18px; flex: none; }
+    .body { display: grid; grid-template-columns: 1fr 150px; min-height: 340px; }
+    .screen { position: relative; overflow: hidden; background: #fff; color: #1a2420; min-height: 340px; }
+    .site-nav { display: flex; gap: 4px; align-items: center; padding: 10px 14px; background: #14532d; color: #fff; font-size: .75rem; font-weight: 600; }
+    .site-nav b { margin-right: auto; font-size: .8rem; }
+    .site-nav > span { padding: 5px 9px; border-radius: 6px; position: relative; }
+    .menu {
+      position: absolute; top: 100%; left: 0; margin-top: 4px; min-width: 130px;
+      background: #fff; color: #1a2420; border: 1px solid #d9e2dd; border-radius: 8px; padding: 4px;
+      box-shadow: 0 8px 20px rgba(0,0,0,.18); opacity: 0; transform: translateY(-4px); pointer-events: none; transition: .2s; z-index: 2;
+    }
+    .menu.open { opacity: 1; transform: none; }
+    .menu span { display: block; padding: 6px 9px; border-radius: 5px; color: #1a2420; font-weight: 500; }
+    .page { padding: 18px 16px; }
+    .page h4 { margin: 0 0 8px; font-size: 1rem; color: #14532d; }
+    .page .ln { height: 8px; border-radius: 4px; background: #e6ece9; margin-bottom: 8px; }
+    .page .apply { display: inline-block; margin-top: 8px; padding: 8px 14px; border-radius: 8px; background: #14532d; color: #fff; font-size: .75rem; font-weight: 700; }
+    .dim { position: absolute; inset: 0; background: var(--dim); opacity: 0; transition: opacity .3s; pointer-events: none; }
+    .ring {
+      position: absolute; border: 3px solid var(--accent); border-radius: 10px;
+      box-shadow: 0 0 0 9999px var(--dim), 0 0 0 4px var(--glow);
+      transition: all .55s cubic-bezier(.4, .1, .2, 1); opacity: 0; pointer-events: none;
+    }
+    .ring.on { opacity: 1; animation: pulse 1.6s ease-in-out infinite; }
+    @keyframes pulse { 50% { box-shadow: 0 0 0 9999px var(--dim), 0 0 0 9px transparent; } }
+    .badge {
+      position: absolute; width: 24px; height: 24px; border-radius: 50%; background: var(--accent); color: var(--on-accent);
+      font-size: .75rem; font-weight: 800; display: grid; place-items: center; opacity: 0; transition: all .55s cubic-bezier(.4, .1, .2, 1);
+    }
+    .badge.on { opacity: 1; }
+    .card {
+      position: absolute; left: 10px; right: 10px; bottom: 10px; padding: 10px 34px 10px 12px;
+      background: #fff; color: #1a2420; border-radius: 12px; border: 1px solid #d9e2dd;
+      box-shadow: 0 10px 28px rgba(0,0,0,.28); transition: opacity .3s, transform .3s; z-index: 3;
+    }
+    .card.hide { opacity: 0; transform: translateY(8px); }
+    .card .st { font-size: .68rem; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: var(--accent-strong); }
+    .card.finish .st { color: #b45309; }
+    .card .tx { font-size: .85rem; font-weight: 600; line-height: 1.45; }
+    .card .nx { margin-top: 4px; font-size: .72rem; color: #5b6b64; }
+    .card .x { position: absolute; top: 6px; right: 10px; font-size: 1rem; color: #8a9a93; }
+    .card[dir="rtl"] { padding: 10px 12px 10px 34px; }
+    .card[dir="rtl"] .x { right: auto; left: 10px; }
+    .card[dir="rtl"] .tx, .card[dir="rtl"] .st, .card[dir="rtl"] .nx { font-family: "Noto Nastaliq Urdu", Inter, sans-serif; line-height: 1.9; letter-spacing: 0; text-transform: none; }
+    .panel { padding: 12px; background: var(--bg-alt); border-left: 1px solid var(--border); font-size: .72rem; display: flex; flex-direction: column; gap: 10px; }
+    .panel .ph { display: flex; align-items: center; gap: 6px; font-weight: 800; font-size: .8rem; }
+    .panel .ph svg { width: 18px; height: 18px; }
+    .panel .goal { padding: 8px; border-radius: 8px; background: var(--surface); border: 1px solid var(--border); color: var(--text); font-weight: 600; line-height: 1.5; }
+    .panel .goal[dir="rtl"] { font-family: "Noto Nastaliq Urdu", Inter, sans-serif; line-height: 2; }
+    .tl { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+    .tl li { display: flex; align-items: center; gap: 8px; color: var(--muted); }
+    .tl li[dir="rtl"] { font-family: "Noto Nastaliq Urdu", Inter, sans-serif; }
+    .tl .d { width: 18px; height: 18px; border-radius: 50%; border: 2px solid var(--border); display: grid; place-items: center; font-size: .6rem; font-weight: 800; flex: none; }
+    .tl li.now { color: var(--text); font-weight: 600; }
+    .tl li.now .d { border-color: var(--accent); background: var(--accent); color: var(--on-accent); }
+    .tl li.past .d { border-color: var(--accent); color: var(--accent-strong); }
+    .tl li.ahead .d { border-color: var(--indigo); color: var(--indigo); }
+    .tl li.ahead { color: var(--indigo); }
+    .demo-note { margin-top: 12px; text-align: center; font-size: .82rem; color: var(--muted); }
+
+    /* problem */
+    .cols3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
+    .tile { padding: 28px; background: var(--surface); border: 1px solid var(--border); border-radius: 18px; }
+    .tile .ic { width: 44px; height: 44px; border-radius: 12px; display: grid; place-items: center; margin-bottom: 16px; background: var(--accent-soft); color: var(--accent-strong); }
+    .tile .ic svg { width: 22px; height: 22px; }
+    .tile.bad .ic { background: #fdecec; color: #dc2626; }
+    @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .tile.bad .ic { background: #3a1717; color: #f87171; } }
+    .tile h3 { font-size: 1.1rem; margin-bottom: 8px; letter-spacing: -.01em; }
+    .tile p { color: var(--muted); font-size: .96rem; }
+    .tile.good { border-color: color-mix(in srgb, var(--accent) 55%, var(--border)); box-shadow: 0 12px 32px -16px var(--glow); }
+
+    /* how */
+    .how { display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; counter-reset: s; }
+    .how .step { position: relative; padding: 28px 22px 24px; background: var(--surface); border: 1px solid var(--border); border-radius: 18px; }
+    .how .step::before {
+      counter-increment: s; content: counter(s);
+      position: absolute; top: -14px; left: 22px; width: 28px; height: 28px; border-radius: 50%;
+      background: var(--accent); color: var(--on-accent); font-weight: 800; font-size: .85rem; display: grid; place-items: center;
+    }
+    .how h3 { font-size: 1.02rem; margin-bottom: 6px; }
+    .how p { color: var(--muted); font-size: .92rem; }
+    .loop {
+      margin: 28px auto 0; max-width: 760px; padding: 16px 20px; border-radius: 14px;
+      background: var(--indigo-soft); color: var(--text); font-size: .95rem; display: flex; gap: 12px; align-items: flex-start;
+    }
+    .loop svg { width: 20px; height: 20px; color: var(--indigo); flex: none; margin-top: 3px; }
+
+    /* features */
+    .grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
+    .feat { padding: 26px; background: var(--surface); border: 1px solid var(--border); border-radius: 18px; transition: transform .2s, box-shadow .2s, border-color .2s; }
+    .feat:hover { transform: translateY(-3px); box-shadow: var(--shadow); border-color: color-mix(in srgb, var(--accent) 50%, var(--border)); }
+    .feat .ic { width: 44px; height: 44px; border-radius: 12px; display: grid; place-items: center; margin-bottom: 14px; background: var(--accent-soft); color: var(--accent-strong); }
+    .feat .ic svg { width: 22px; height: 22px; }
+    .feat h3 { font-size: 1.05rem; margin-bottom: 6px; letter-spacing: -.01em; }
+    .feat p { color: var(--muted); font-size: .94rem; }
+
+    /* privacy */
+    .privacy {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 48px; align-items: center;
+      padding: 48px; border-radius: 28px; color: #eaf6f1;
+      background: radial-gradient(900px 400px at 100% 0, rgba(16, 185, 129, .35), transparent 60%), #0d1f19;
+    }
+    .privacy h2 { font-size: clamp(1.6rem, 3.6vw, 2.2rem); line-height: 1.2; letter-spacing: -.02em; font-weight: 800; margin-bottom: 12px; }
+    .privacy p { color: #b7cfc6; }
+    .privacy ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
+    .privacy li { display: flex; gap: 12px; padding: 14px 16px; border-radius: 14px; background: rgba(255, 255, 255, .06); border: 1px solid rgba(255, 255, 255, .1); font-size: .95rem; }
+    .privacy li svg { width: 20px; height: 20px; color: #34d399; flex: none; margin-top: 3px; }
+    .privacy li b { color: #fff; }
+
+    /* setup */
+    .timeline { max-width: 760px; margin: 0 auto; padding: 0; list-style: none; counter-reset: t; position: relative; }
+    .timeline::before { content: ""; position: absolute; left: 19px; top: 20px; bottom: 20px; width: 2px; background: var(--border); }
+    .timeline li { counter-increment: t; position: relative; padding: 0 0 28px 64px; }
+    .timeline li:last-child { padding-bottom: 0; }
+    .timeline li::before {
+      content: counter(t); position: absolute; left: 0; top: 0; width: 40px; height: 40px; border-radius: 50%;
+      background: var(--accent); color: var(--on-accent); font-weight: 800; display: grid; place-items: center;
+      box-shadow: 0 0 0 6px var(--bg);
+    }
+    .alt .timeline li::before { box-shadow: 0 0 0 6px var(--bg-alt); }
+    .timeline h3 { font-size: 1.1rem; margin: 6px 0 6px; letter-spacing: -.01em; }
+    .timeline p { color: var(--muted); }
+    .timeline .row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 12px; }
+    code { padding: 2px 8px; border-radius: 6px; background: var(--code-bg); color: var(--text); font: .9em ui-monospace, Consolas, monospace; overflow-wrap: anywhere; }
+    .small { font-size: .88rem; color: var(--muted); }
+
+    /* faq */
+    .faq { max-width: 760px; margin: 0 auto; display: grid; gap: 12px; }
+    details { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 0 20px; transition: border-color .2s; }
+    details[open] { border-color: color-mix(in srgb, var(--accent) 50%, var(--border)); }
+    summary { cursor: pointer; font-weight: 600; padding: 18px 28px 18px 0; list-style: none; position: relative; }
+    summary::-webkit-details-marker { display: none; }
+    summary::after { content: "+"; position: absolute; right: 0; top: 14px; font-size: 1.4rem; font-weight: 400; color: var(--accent-strong); transition: transform .2s; }
+    details[open] summary::after { transform: rotate(45deg); }
+    details p { color: var(--muted); padding: 0 0 18px; }
+
+    /* cta + footer */
+    .cta {
+      text-align: center; padding: 64px 24px; border-radius: 28px; color: #fff;
+      background: radial-gradient(700px 300px at 50% 0, rgba(255, 255, 255, .22), transparent 70%), linear-gradient(135deg, #059669, #047857);
+    }
+    .cta h2 { font-size: clamp(1.8rem, 4.5vw, 2.8rem); line-height: 1.15; letter-spacing: -.03em; font-weight: 800; margin-bottom: 12px; }
+    .cta p { opacity: .9; max-width: 32em; margin: 0 auto 28px; }
+    .cta .btn.primary { background: #fff; border-color: #fff; color: #065f46; box-shadow: 0 10px 30px -10px rgba(0, 0, 0, .4); }
+    .cta .btn.primary:hover { background: #f0fdf8; }
+    .cta .btn.ghost { background: transparent; border-color: rgba(255, 255, 255, .5); color: #fff; }
+    footer { padding: 48px 0 56px; border-top: 1px solid var(--border); margin-top: 88px; }
+    footer .wrap { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 24px; align-items: flex-start; }
+    footer .brand { font-size: 1.05rem; }
+    footer .brand svg { width: 28px; height: 28px; }
+    footer p { color: var(--muted); font-size: .88rem; margin-top: 10px; max-width: 30em; }
+    footer nav { display: flex; gap: 20px; flex-wrap: wrap; }
+    footer nav a { color: var(--muted); font-size: .92rem; text-decoration: none; }
+    footer nav a:hover { color: var(--text); }
+
+    @media (max-width: 960px) {
+      .hero .wrap { grid-template-columns: 1fr; gap: 40px; }
+      .how { grid-template-columns: repeat(2, 1fr); row-gap: 32px; }
+      .privacy { grid-template-columns: 1fr; padding: 32px; gap: 28px; }
+    }
+    @media (max-width: 760px) {
+      section { padding: 64px 0; }
+      .links, .nav-cta .gh { display: none; }
+      .cols3, .grid3 { grid-template-columns: 1fr; }
+      .hero { padding: 40px 0 64px; }
+      .body { grid-template-columns: 1fr; }
+      .panel { display: none; }
+    }
+    @media (max-width: 520px) {
+      .how { grid-template-columns: 1fr; }
+      .actions .btn { width: 100%; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      * { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+    }
   </style>
 </head>
 <body>
-  <main>
-    <span class="badge">Open source · Apache 2.0</span>
-    <h1>GuideMe: show me where to click</h1>
-    <p class="lead">A Chrome extension that guides you through any website step by step, in English or Urdu. It points at the right button and tells you what to do, so you learn to do it yourself.</p>
 
-    <div class="actions">
-      <a class="btn primary" href="https://github.com/huzaifa282/GuideMe/archive/refs/heads/main.zip">Download GuideMe (ZIP)</a>
-      <a class="btn" href="https://github.com/huzaifa282/GuideMe">View on GitHub</a>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <linearGradient id="lg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#34d399"/><stop offset=".55" stop-color="#10b981"/><stop offset="1" stop-color="#047857"/>
+    </linearGradient>
+    <symbol id="logo" viewBox="0 0 128 128">
+      <rect x="4" y="4" width="120" height="120" rx="30" fill="url(#lg)"/>
+      <circle cx="54" cy="52" r="27" fill="none" stroke="#fff" stroke-width="10"/>
+      <circle cx="54" cy="52" r="9" fill="#fff" opacity=".9"/>
+      <path d="M60 58 L60 108 L72.5 96 L82 116 L92 111.5 L82.5 92 L100 92 Z" fill="#fff" stroke="#065f46" stroke-width="6" stroke-linejoin="round"/>
+    </symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-down" viewBox="0 0 24 24"><path d="M12 3v12m0 0-5-5m5 5 5-5M5 21h14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-gh" viewBox="0 0 24 24"><path fill="currentColor" d="M12 .5a12 12 0 0 0-3.8 23.4c.6.1.8-.3.8-.6v-2c-3.3.7-4-1.6-4-1.6-.6-1.4-1.4-1.8-1.4-1.8-1-.7.1-.7.1-.7 1.2.1 1.8 1.2 1.8 1.2 1 1.8 2.8 1.3 3.5 1 .1-.8.4-1.3.7-1.6-2.7-.3-5.5-1.3-5.5-6 0-1.3.5-2.4 1.2-3.2-.1-.3-.5-1.5.1-3.2 0 0 1-.3 3.3 1.2a11.5 11.5 0 0 1 6 0c2.3-1.5 3.3-1.2 3.3-1.2.6 1.7.2 2.9.1 3.2.8.8 1.2 1.9 1.2 3.2 0 4.600-2.800 5.600-5.500 5.900.4.400.8 1.100.8 2.200v3.300c0 .3.2.7.8.6A12 12 0 0 0 12 .5Z"/></symbol>
+  </defs>
+</svg>
+
+<header class="nav">
+  <div class="wrap">
+    <a class="brand" href="#top" aria-label="GuideMe home"><svg aria-hidden="true"><use href="#logo"/></svg>GuideMe</a>
+    <nav class="links" aria-label="Sections">
+      <a href="#how">How it works</a>
+      <a href="#features">Features</a>
+      <a href="#setup">Setup</a>
+      <a href="#faq">FAQ</a>
+    </nav>
+    <div class="nav-cta">
+      <a class="btn sm gh" href="https://github.com/huzaifa282/GuideMe"><svg aria-hidden="true"><use href="#i-gh"/></svg>GitHub</a>
+      <a class="btn sm primary" href="https://github.com/huzaifa282/GuideMe/archive/refs/heads/main.zip">Download</a>
     </div>
-    <p class="small">Needs Google Chrome 116 or newer on a computer. Setup takes about three minutes.</p>
+  </div>
+</header>
 
-    <h2>Demo</h2>
-    <div class="demo"><!-- TODO: replace with the demo GIF or video link --><span>Demo GIF / video: coming soon</span></div>
+<main id="top">
 
-    <h2>Set it up</h2>
-    <ol class="steps">
-      <li>
-        <h3>Download and unzip</h3>
-        <p>Press the green <strong>Download GuideMe (ZIP)</strong> button above, then unzip the file. You will get a folder called <code>GuideMe-main</code>. Keep it somewhere permanent, because Chrome loads the extension from it.</p>
-      </li>
-      <li>
-        <h3>Open Chrome's extensions page</h3>
-        <p>Websites cannot open this page for you, so copy its address and paste it into a new Chrome tab.</p>
-        <div class="row">
-          <code id="addr">chrome://extensions</code>
-          <button class="btn" type="button" id="copy">Copy address</button>
-          <span class="small" id="copied" role="status" aria-live="polite"></span>
+  <!-- HERO -->
+  <section class="hero">
+    <div class="wrap">
+      <div>
+        <span class="eyebrow"><span class="pip"></span>Open source · Powered by Gemma 4</span>
+        <h1>Show me <em>where to click.</em></h1>
+        <p class="lead">GuideMe is a Chrome extension that walks you through any website, one click at a time, in English, Urdu or Roman Urdu. It doesn't do the task for you. It points at the right button and tells you why, so next time you can do it yourself.</p>
+        <div class="actions">
+          <a class="btn primary" href="https://github.com/huzaifa282/GuideMe/archive/refs/heads/main.zip"><svg aria-hidden="true"><use href="#i-down"/></svg>Download for Chrome</a>
+          <a class="btn" href="#setup">How to install</a>
         </div>
-      </li>
-      <li>
-        <h3>Turn on Developer mode and load the folder</h3>
-        <p>Switch on <strong>Developer mode</strong> (top right), click <strong>Load unpacked</strong>, and choose the <code>GuideMe-main</code> folder, the one that contains a file named <code>manifest.json</code>.</p>
-      </li>
-      <li>
-        <h3>Add your free API key</h3>
-        <p>GuideMe uses Google's Gemma 4 through the Gemini API, and every person uses their own free key.</p>
-        <div class="row">
-          <a class="btn" href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">Get a free API key</a>
+        <ul class="trust">
+          <li><svg aria-hidden="true"><use href="#i-check"/></svg>Free &amp; open source</li>
+          <li><svg aria-hidden="true"><use href="#i-check"/></svg>No account</li>
+          <li><svg aria-hidden="true"><use href="#i-check"/></svg>No server</li>
+          <li><svg aria-hidden="true"><use href="#i-check"/></svg>Apache 2.0</li>
+        </ul>
+        <p class="req">Needs Google Chrome 116 or newer on a computer. Setup takes about three minutes.</p>
+      </div>
+
+      <div class="demo">
+        <div class="langs" role="group" aria-label="Demo language">
+          <button type="button" data-lang="en" aria-pressed="true">English</button>
+          <button type="button" data-lang="ur" aria-pressed="false">اردو</button>
+          <button type="button" data-lang="roman" aria-pressed="false">Roman Urdu</button>
         </div>
-        <p style="margin-top:10px">Then right-click the GuideMe icon (pin it first from the puzzle-piece menu), choose <strong>Options</strong>, paste the key and press <strong>Save</strong>.</p>
-      </li>
-      <li>
-        <h3>Try it</h3>
-        <p>Open any website, click the GuideMe icon, type what you want to do (for example <em>"apply for undergraduate admission"</em>) and press <strong>Start</strong>. Click the highlighted item, and GuideMe takes you to the next step. Press <strong>Stop</strong> to finish.</p>
-      </li>
-    </ol>
+        <div class="window" aria-hidden="true" id="demo">
+          <div class="bar"><i></i><i></i><i></i><span class="url">https://university.edu.pk</span><svg class="ext"><use href="#logo"/></svg></div>
+          <div class="body">
+            <div class="screen" id="screen">
+              <div class="site-nav"><b>City University</b><span>Home</span><span>About</span><span id="t-adm">Admissions<span class="menu" id="menu"><span id="t-ug">Undergraduate</span><span>Postgraduate</span><span>Fee structure</span></span></span><span>Contact</span></div>
+              <div class="page">
+                <h4>Undergraduate Admissions</h4>
+                <div class="ln" style="width:92%"></div><div class="ln" style="width:80%"></div><div class="ln" style="width:86%"></div>
+                <span class="apply" id="t-apply">Apply Online</span>
+              </div>
+              <div class="ring" id="ring"></div>
+              <div class="badge" id="badge">1</div>
+              <div class="card hide" id="card"><div class="st"></div><div class="tx"></div><div class="nx"></div><span class="x">×</span></div>
+            </div>
+            <div class="panel">
+              <div class="ph"><svg><use href="#logo"/></svg>GuideMe</div>
+              <div class="goal" id="goal"></div>
+              <ul class="tl" id="tl"></ul>
+            </div>
+          </div>
+        </div>
+        <p class="demo-note">Interactive preview: pick a language to see how GuideMe talks to you.</p>
+      </div>
+    </div>
+  </section>
 
-    <h2>Questions</h2>
-    <details>
-      <summary>Why do I have to use Developer mode?</summary>
-      <p>Chrome only lets websites install extensions from the Chrome Web Store. GuideMe is loaded directly from the folder you downloaded, which is why Chrome asks for Developer mode. Nothing is installed anywhere else.</p>
-    </details>
-    <details>
-      <summary>What is sent to Google?</summary>
-      <p>To choose the next step, GuideMe sends the page title, its address, your goal, and short texts of buttons, links and info on the page from your browser to Google's Gemini API. GuideMe has no server of its own and keeps your API key only in your browser.</p>
-    </details>
-    <details>
-      <summary>It says "Add your API key in Options" or "Cannot run on this page"</summary>
-      <p>Paste your key in Settings (the gear in the side panel) and press Save. Chrome does not allow extensions on <code>chrome://</code> pages or the Chrome Web Store, so open a normal website instead.</p>
-    </details>
+  <!-- PROBLEM -->
+  <section class="alt" aria-labelledby="prob">
+    <div class="wrap">
+      <div class="sec-head">
+        <span class="eyebrow">Why GuideMe</span>
+        <h2 id="prob">Websites hide what you need. Agents hide how it's done.</h2>
+        <p>Portals bury the right link in a footer, and one wrong click sends you back to the start. GuideMe takes a different path.</p>
+      </div>
+      <div class="cols3">
+        <div class="tile bad">
+          <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.7.4-1 .9-1 1.7M12 17h.01"/></svg></div>
+          <h3>You get lost</h3>
+          <p>Hidden menus, long pages and unclear labels turn a five-minute task into an hour, especially on university and government portals.</p>
+        </div>
+        <div class="tile bad">
+          <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="7" width="16" height="12" rx="3"/><path d="M12 7V3M9 13h.01M15 13h.01"/></svg></div>
+          <h3>Agents take over</h3>
+          <p>AI agents click for you. It works once, but you learn nothing and you can't see what happened on your own account.</p>
+        </div>
+        <div class="tile good">
+          <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="2.5"/></svg></div>
+          <h3>GuideMe teaches</h3>
+          <p>It highlights the one right element, explains in a sentence what to do and why, and waits for <em>you</em> to click.</p>
+        </div>
+      </div>
+    </div>
+  </section>
 
-    <footer class="small">
-      <p>Built at Hacktoberfest Hack Day Faisalabad 2026 · <a href="https://github.com/huzaifa282/GuideMe">Source code and full README</a> · Apache License 2.0</p>
-    </footer>
-  </main>
+  <!-- HOW -->
+  <section id="how" aria-labelledby="how-h">
+    <div class="wrap">
+      <div class="sec-head">
+        <span class="eyebrow">How it works</span>
+        <h2 id="how-h">Four quick moves behind every highlight</h2>
+        <p>Every step goes through the same small pipeline, in a couple of seconds.</p>
+      </div>
+      <div class="how">
+        <div class="step"><h3>Scan the page</h3><p>Reads visible buttons, links and inputs across the whole page, including hidden dropdown items and contact details.</p></div>
+        <div class="step"><h3>Rank what matters</h3><p>Scores items against your goal locally, with synonyms, so only the most relevant ones are sent on.</p></div>
+        <div class="step"><h3>Gemma picks the click</h3><p>Gemma 4 checks your last click and chooses the single next element, then writes a short instruction.</p></div>
+        <div class="step"><h3>You see the spotlight</h3><p>The page dims around a pulsing ring with a step badge and a clear instruction. You click, and it moves on.</p></div>
+      </div>
+      <div class="loop">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 0 1 15-6.7L21 8M21 3v5h-5M21 12a9 9 0 0 1-15 6.7L3 16M3 21v-5h5"/></svg>
+        <span><b>Look-ahead:</b> while you read a step, GuideMe already reads the next page in the background, so the following instruction appears almost instantly when you click.</span>
+      </div>
+    </div>
+  </section>
 
-  <script>
-    // Websites cannot open chrome:// pages, so offer a copy button instead of a link.
-    (function () {
-      var button = document.getElementById('copy');
-      var label = document.getElementById('copied');
-      var text = document.getElementById('addr').textContent;
+  <!-- FEATURES -->
+  <section id="features" class="alt" aria-labelledby="feat-h">
+    <div class="wrap">
+      <div class="sec-head">
+        <span class="eyebrow">Features</span>
+        <h2 id="feat-h">Built for people, not power users</h2>
+        <p>Everything is designed so a first-time visitor can finish the task without asking anyone.</p>
+      </div>
+      <div class="grid3">
+        <div class="feat"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h9M8.500 3v2M6 5c.5 4 3 7 7 9M12 5c-.5 4-3 7-7 9M13 21l4-10 4 10M14.500 18h5"/></svg></div><h3>Your language</h3><p>Ask in English, Urdu or Roman Urdu and get instructions in the same language, with right-to-left cards for Urdu.</p></div>
+        <div class="feat"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/></svg></div><h3>Spotlight highlight</h3><p>The page dims around a pulsing ring. Hover the target and the dim fades so menus stay readable.</p></div>
+        <div class="feat"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M4 12h10M4 18h6M17 14l3 3-3 3"/></svg></div><h3>Dropdown aware</h3><p>Finds items inside hidden menus, opens them for you and picks the right option the moment you hover.</p></div>
+        <div class="feat"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4h14v12H8l-3 3zM9 9h6M9 12h4"/></svg></div><h3>Answers from the page</h3><p>Ask for a phone number, email or address and GuideMe highlights it and puts the actual answer in the card.</p></div>
+        <div class="feat"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div><h3>Multi-page guidance</h3><p>Follows goals across several pages with a step timeline, and finishes with a clear “All done!” card.</p></div>
+        <div class="feat"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></svg></div><h3>Resilient and fast</h3><p>Retries failed calls, switches models automatically and remembers answers, so a slow moment doesn't end your session.</p></div>
+      </div>
+    </div>
+  </section>
 
-      function done(ok) {
-        label.textContent = ok ? 'Copied!' : 'Select the address and press Ctrl+C.';
-        setTimeout(function () { label.textContent = ''; }, 2500);
-      }
+  <!-- PRIVACY -->
+  <section aria-labelledby="priv-h">
+    <div class="wrap">
+      <div class="privacy">
+        <div>
+          <h2 id="priv-h">No server. No account. Your key stays yours.</h2>
+          <p>GuideMe talks straight from your browser to Google's Gemini API using your own free key. There is nothing of ours in the middle.</p>
+        </div>
+        <ul>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.200" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg><span><b>Stored only in your browser.</b> Your API key never leaves it and is never committed anywhere.</span></li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.200" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg><span><b>Only what's needed is sent.</b> Page title, address, your goal and short texts of buttons, links and info snippets.</span></li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.200" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg><span><b>Open source.</b> Read every line on GitHub. Avoid pages that show information you wouldn't want sent to Google.</span></li>
+        </ul>
+      </div>
+    </div>
+  </section>
 
-      function fallback() {
-        var range = document.createRange();
-        range.selectNodeContents(document.getElementById('addr'));
-        var selection = window.getSelection();
-        selection.removeAllRanges();
-        selection.addRange(range);
-        var ok = false;
-        try { ok = document.execCommand('copy'); } catch (e) {}
-        done(ok);
-      }
+  <!-- SETUP -->
+  <section id="setup" class="alt" aria-labelledby="setup-h">
+    <div class="wrap">
+      <div class="sec-head">
+        <span class="eyebrow">Setup</span>
+        <h2 id="setup-h">Up and running in three minutes</h2>
+        <p>Chrome only allows one-click installs from the Chrome Web Store, so you load GuideMe yourself. It's five short steps.</p>
+      </div>
+      <ol class="timeline">
+        <li>
+          <h3>Download and unzip</h3>
+          <p>Download the ZIP and unzip it. You'll get a folder called <code>GuideMe-main</code>. Keep it somewhere permanent, because Chrome loads the extension from it.</p>
+          <div class="row"><a class="btn primary sm" href="https://github.com/huzaifa282/GuideMe/archive/refs/heads/main.zip"><svg aria-hidden="true"><use href="#i-down"/></svg>Download GuideMe (ZIP)</a></div>
+        </li>
+        <li>
+          <h3>Open Chrome's extensions page</h3>
+          <p>Websites can't open this page for you, so copy its address and paste it into a new Chrome tab.</p>
+          <div class="row">
+            <code id="addr">chrome://extensions</code>
+            <button class="btn sm" type="button" id="copy">Copy address</button>
+            <span class="small" id="copied" role="status" aria-live="polite"></span>
+          </div>
+        </li>
+        <li>
+          <h3>Turn on Developer mode and load the folder</h3>
+          <p>Switch on <strong>Developer mode</strong> (top right), click <strong>Load unpacked</strong>, and choose the <code>GuideMe-main</code> folder, the one that contains a file named <code>manifest.json</code>.</p>
+        </li>
+        <li>
+          <h3>Add your free API key</h3>
+          <p>GuideMe uses Google's Gemma 4 through the Gemini API, and every person uses their own free key. Pin GuideMe from the puzzle-piece menu, right-click its icon, choose <strong>Options</strong>, paste the key and press <strong>Save</strong>.</p>
+          <div class="row"><a class="btn sm" href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">Get a free API key</a></div>
+        </li>
+        <li>
+          <h3>Try it</h3>
+          <p>Open any website, click the GuideMe icon, type what you want to do (for example <em>“apply for undergraduate admission”</em>) and press <strong>Start</strong>. Click the highlighted item and GuideMe takes you to the next step. Press <strong>Stop</strong> to finish.</p>
+        </li>
+      </ol>
+    </div>
+  </section>
 
-      button.addEventListener('click', function () {
-        if (navigator.clipboard && navigator.clipboard.writeText) {
-          var settled = false;
-          // If the browser never answers (e.g. the page is not focused), still give the user a way to copy.
-          var timer = setTimeout(function () { if (!settled) { settled = true; fallback(); } }, 800);
-          navigator.clipboard.writeText(text).then(function () {
-            if (settled) return;
-            settled = true;
-            clearTimeout(timer);
-            done(true);
-          }, function () {
-            if (settled) return;
-            settled = true;
-            clearTimeout(timer);
-            fallback();
-          });
-        } else {
+  <!-- FAQ -->
+  <section id="faq" aria-labelledby="faq-h">
+    <div class="wrap">
+      <div class="sec-head">
+        <span class="eyebrow">FAQ</span>
+        <h2 id="faq-h">Questions, answered</h2>
+      </div>
+      <div class="faq">
+        <details>
+          <summary>Is GuideMe free?</summary>
+          <p>Yes. GuideMe is open source under the Apache 2.0 license, and the Gemini API has a free tier. Each person uses their own free key from Google AI Studio.</p>
+        </details>
+        <details>
+          <summary>Which languages does it understand?</summary>
+          <p>English, Urdu script and Roman Urdu. Instructions come back in the language you asked in, including right-to-left cards for Urdu.</p>
+        </details>
+        <details>
+          <summary>Why do I have to use Developer mode?</summary>
+          <p>Chrome only lets websites install extensions from the Chrome Web Store. GuideMe is loaded directly from the folder you downloaded, which is why Chrome asks for Developer mode. Nothing is installed anywhere else.</p>
+        </details>
+        <details>
+          <summary>What is sent to Google?</summary>
+          <p>To choose the next step, GuideMe sends the page title, its address, your goal, and short texts of buttons, links and info on the page from your browser to Google's Gemini API. GuideMe has no server of its own and keeps your API key only in your browser.</p>
+        </details>
+        <details>
+          <summary>It says “Add your API key in Options” or “Cannot run on this page”</summary>
+          <p>Paste your key in Settings (the gear in the side panel) and press Save. Chrome doesn't allow extensions on <code>chrome://</code> pages or the Chrome Web Store, so open a normal website instead.</p>
+        </details>
+      </div>
+    </div>
+  </section>
+
+  <!-- FINAL CTA -->
+  <section style="padding-top:0">
+    <div class="wrap">
+      <div class="cta">
+        <h2>Stop getting lost on websites.</h2>
+        <p>Download GuideMe, add your free key, and let it show you where to click next.</p>
+        <div style="display:flex;flex-wrap:wrap;gap:12px;justify-content:center">
+          <a class="btn primary" href="https://github.com/huzaifa282/GuideMe/archive/refs/heads/main.zip"><svg aria-hidden="true"><use href="#i-down"/></svg>Download for Chrome</a>
+          <a class="btn ghost" href="https://github.com/huzaifa282/GuideMe"><svg aria-hidden="true"><use href="#i-gh"/></svg>Star on GitHub</a>
+        </div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <div>
+      <a class="brand" href="#top"><svg aria-hidden="true"><use href="#logo"/></svg>GuideMe</a>
+      <p>Show me where to click. Built at Hacktoberfest Hack Day Faisalabad 2026.</p>
+    </div>
+    <nav aria-label="Footer">
+      <a href="https://github.com/huzaifa282/GuideMe">GitHub</a>
+      <a href="https://github.com/huzaifa282/GuideMe#readme">README</a>
+      <a href="https://github.com/huzaifa282/GuideMe/blob/main/LICENSE">Apache License 2.0</a>
+    </nav>
+  </div>
+</footer>
+
+<script>
+  // ---- Copy button: websites cannot open chrome:// pages, so offer a copy button instead of a link. ----
+  (function () {
+    var button = document.getElementById('copy');
+    var label = document.getElementById('copied');
+    var text = document.getElementById('addr').textContent;
+
+    function done(ok) {
+      label.textContent = ok ? 'Copied!' : 'Select the address and press Ctrl+C.';
+      setTimeout(function () { label.textContent = ''; }, 2500);
+    }
+
+    function fallback() {
+      var range = document.createRange();
+      range.selectNodeContents(document.getElementById('addr'));
+      var selection = window.getSelection();
+      selection.removeAllRanges();
+      selection.addRange(range);
+      var ok = false;
+      try { ok = document.execCommand('copy'); } catch (e) {}
+      done(ok);
+    }
+
+    button.addEventListener('click', function () {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        var settled = false;
+        // If the browser never answers (e.g. the page is not focused), still give the user a way to copy.
+        var timer = setTimeout(function () { if (!settled) { settled = true; fallback(); } }, 800);
+        navigator.clipboard.writeText(text).then(function () {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timer);
+          done(true);
+        }, function () {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timer);
           fallback();
-        }
+        });
+      } else {
+        fallback();
+      }
+    });
+  })();
+
+  // ---- Product demo: a looping three-step walkthrough in three languages. ----
+  (function () {
+    var COPY = {
+      en: {
+        dir: 'ltr', goal: 'I want to apply for undergraduate admission',
+        step: 'Step', done: 'All done!', next: 'Next:',
+        say: ["Hover 'Admissions' at the top.", "Under Admissions, click 'Undergraduate'.", "Click 'Apply Online' to start your application."],
+        fin: 'You reached the application page. Fill in the form to apply.',
+        tl: ['Open Admissions', 'Choose Undergraduate', 'Apply Online']
+      },
+      ur: {
+        dir: 'rtl', goal: 'مجھے انڈرگریجویٹ داخلے کے لیے اپلائی کرنا ہے',
+        step: 'مرحلہ', done: 'مکمل ہو گیا!', next: 'اگلا:',
+        say: ["اوپر 'Admissions' پر ماؤس لے جائیں۔", "Admissions مینو میں 'Undergraduate' پر کلک کریں۔", "درخواست شروع کرنے کے لیے 'Apply Online' پر کلک کریں۔"],
+        fin: 'آپ درخواست کے صفحے پر پہنچ گئے ہیں۔ فارم بھر کر اپلائی کریں۔',
+        tl: ['Admissions کھولیں', 'Undergraduate چنیں', 'Apply Online']
+      },
+      roman: {
+        dir: 'ltr', goal: 'mujhe undergraduate admission ke liye apply karna hai',
+        step: 'Qadam', done: 'Ho gaya!', next: 'Agla:',
+        say: ["Upar 'Admissions' par mouse le jayein.", "Admissions menu mein 'Undergraduate' par click karein.", "Application shuru karne ke liye 'Apply Online' par click karein."],
+        fin: 'Aap application page par pohanch gaye. Form bhar kar apply karein.',
+        tl: ['Admissions kholein', 'Undergraduate chunein', 'Apply Online']
+      }
+    };
+    var TARGETS = ['t-adm', 't-ug', 't-apply'];
+
+    var screen = document.getElementById('screen');
+    var ring = document.getElementById('ring');
+    var badge = document.getElementById('badge');
+    var card = document.getElementById('card');
+    var menu = document.getElementById('menu');
+    var goal = document.getElementById('goal');
+    var tl = document.getElementById('tl');
+    var buttons = document.querySelectorAll('.langs button');
+    var reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+    var lang = 'en';
+    var step = 0;      // 0..2 = highlight steps, 3 = finished
+    var timer = null;
+    var paused = false;
+
+    function place(id) {
+      var el = document.getElementById(id);
+      var s = screen.getBoundingClientRect();
+      var r = el.getBoundingClientRect();
+      var pad = 5;
+      ring.style.left = (r.left - s.left - pad) + 'px';
+      ring.style.top = (r.top - s.top - pad) + 'px';
+      ring.style.width = (r.width + pad * 2) + 'px';
+      ring.style.height = (r.height + pad * 2) + 'px';
+      badge.style.left = Math.max(4, r.left - s.left - pad) + 'px';
+      badge.style.top = Math.max(4, r.top - s.top - pad - 28) + 'px';
+    }
+
+    function buildTimeline(c) {
+      tl.innerHTML = '';
+      c.tl.forEach(function (text, i) {
+        var li = document.createElement('li');
+        li.dir = c.dir;
+        li.innerHTML = '<span class="d"></span><span></span>';
+        li.lastChild.textContent = text;
+        li.firstChild.textContent = i + 1;
+        li.className = step === 3 || i < step ? 'past' : i === step ? 'now' : 'ahead';
+        if (li.className === 'past') li.firstChild.textContent = '✓';
+        tl.appendChild(li);
       });
-    })();
-  </script>
+    }
+
+    function render() {
+      var c = COPY[lang];
+      goal.textContent = c.goal;
+      goal.dir = c.dir;
+      buildTimeline(c);
+      var st = card.querySelector('.st');
+      var tx = card.querySelector('.tx');
+      var nx = card.querySelector('.nx');
+      card.dir = c.dir;
+      card.classList.remove('hide');
+      if (step < 3) {
+        card.classList.remove('finish');
+        menu.classList.toggle('open', step === 1);
+        ring.classList.add('on');
+        badge.classList.add('on');
+        badge.textContent = step + 1;
+        place(TARGETS[step]);
+        // The dropdown slides in; measure again once it has settled.
+        if (step === 1) setTimeout(function () { if (step === 1) place(TARGETS[1]); }, 260);
+        st.textContent = c.step + ' ' + (step + 1);
+        tx.textContent = c.say[step];
+        nx.textContent = step < 2 ? c.next + ' ' + c.tl[step + 1] : '';
+      } else {
+        card.classList.add('finish');
+        menu.classList.remove('open');
+        ring.classList.remove('on');
+        badge.classList.remove('on');
+        st.textContent = c.done;
+        tx.textContent = c.fin;
+        nx.textContent = '';
+      }
+    }
+
+    function tick() {
+      if (paused) return;
+      step = (step + 1) % 4;
+      render();
+    }
+
+    function start() {
+      clearInterval(timer);
+      if (!reduced) timer = setInterval(tick, 3200);
+    }
+
+    buttons.forEach(function (b) {
+      b.addEventListener('click', function () {
+        lang = b.getAttribute('data-lang');
+        buttons.forEach(function (o) { o.setAttribute('aria-pressed', o === b ? 'true' : 'false'); });
+        step = 0;
+        render();
+        start();
+      });
+    });
+
+    var demo = document.getElementById('demo');
+    demo.addEventListener('mouseenter', function () { paused = true; });
+    demo.addEventListener('mouseleave', function () { paused = false; });
+    window.addEventListener('resize', function () { if (step < 3) place(TARGETS[step]); });
+
+    // Wait for fonts so measured positions are right, then start.
+    var go = function () { render(); start(); };
+    if (document.fonts && document.fonts.ready) document.fonts.ready.then(go); else go();
+  })();
+</script>
 </body>
 </html>
