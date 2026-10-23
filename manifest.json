@@ -1,0 +1,25 @@
+{
+  "manifest_version": 3,
+  "name": "GuideMe",
+  "version": "0.0.1",
+  "description": "Step-by-step guidance on any website, highlighting the right element to click.",
+     "permissions": ["sidePanel", "storage", "tabs", "scripting", "activeTab"],
+  "host_permissions": ["https://generativelanguage.googleapis.com/*", "<all_urls>"],
+  "options_page": "options.html",
+  "background": {
+    "service_worker": "background.js"
+  },
+  "side_panel": {
+    "default_path": "sidepanel.html"
+  },
+  "action": {
+    "default_title": "Open GuideMe"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}
