@@ -37,7 +37,7 @@ Rules:
 - If no element fits, use action ask_user and say in the instruction what the user can try.
 - Use History (steps already done) to set "progress": on_track (the last step moved toward the goal, or no history yet), off_track (the user is somewhere unhelpful: pick the element that leads back), done (goal reached: action finish, and say what they achieved).
 - "menuPicks": for each dropdown menu with an item relevant to the goal, the best item as {"menuId":N,"itemId":id}. At most 5; [] if none.
-- Write "instruction" in the SAME language and script as the user's goal (English, Urdu script, or Roman Urdu). Keep it short and friendly (max 18 words unless it carries an answer) and quote the element's visible text, e.g. Click 'Apply Online'. "reason": English, max 12 words.
+- Write "instruction" in the language named on the "Reply language" line of the request (English, Urdu script, or Roman Urdu), whatever language the page itself is in. Keep it short and friendly (max 18 words unless it carries an answer) and quote the element's visible text, e.g. Click 'Apply Online'. "reason": English, max 12 words.
 Output a single JSON object:
 {"action":"highlight"|"finish"|"ask_user","elementId":number|null,"instruction":string,"reason":string,"progress":"on_track"|"off_track"|"done","menuPicks":[{"menuId":number,"itemId":number}]}
 
@@ -54,7 +54,21 @@ Elements:
 10|H|a|ADMISSIONS|>/admissions
 11|H|a|Undergraduate|>/admissions/ug|menu: ADMISSIONS (hidden)|mid:10
 12|H|a|Contact|>/contact
-Output: {"action":"highlight","elementId":11,"instruction":"ADMISSIONS menu kholein aur 'Undergraduate' par click karein.","reason":"Undergraduate admissions page has the application.","progress":"on_track","menuPicks":[{"menuId":10,"itemId":11}]}`;
+Output: {"action":"highlight","elementId":11,"instruction":"ADMISSIONS menu kholein aur 'Undergraduate' par click karein.","reason":"Undergraduate admissions page has the application.","progress":"on_track","menuPicks":[{"menuId":10,"itemId":11}]}
+
+Example 3:
+Goal: "مجھے لاگ ان کرنا ہے"
+Elements:
+1|H|a|Home|>/
+2|H|button|Sign in
+Output: {"action":"highlight","elementId":2,"instruction":"اوپر 'Sign in' پر کلک کریں۔","reason":"Opens the login form.","progress":"on_track","menuPicks":[]}`;
+
+// Hard language rule appended to every request (see langOf); "instruction" must follow it.
+const REPLY_LANGUAGE = {
+  en: 'Reply language: English. Write "instruction" in English.',
+  ur: 'Reply language: Urdu in Urdu script (اردو). Write "instruction" ONLY in Urdu script, not English or Roman Urdu; keep an element\'s visible text quoted exactly as it appears on the page.',
+  roman: 'Reply language: Roman Urdu (Urdu written in English letters). Write "instruction" in Roman Urdu, not English.',
+};
 
 const FINAL_LINE =
   'Respond with ONLY the JSON object. Do not restate the goal or elements. No explanation, no markdown.';
@@ -278,14 +292,14 @@ function buildPrompt(goal, title, url, list, progress, understood) {
     progress && progress.history.length
       ? `Step: ${progress.step}\nHistory:\n${formatHistory(progress.history)}\n`
       : '';
-  const english = understood && understood.english ? `Goal in English: ${understood.english}\n` : '';
+  const english = understood && understood.english ? `Goal in English (for understanding only): ${understood.english}\n` : '';
   return {
     system: `${INSTRUCTIONS}\n\n${FINAL_LINE}`,
-    user: `Page: ${title} (${url})\nGoal: ${JSON.stringify(goal)}\n${english}${steps}Elements:\n${list}`,
+    user: `Page: ${title} (${url})\nGoal: ${JSON.stringify(goal)}\n${english}${REPLY_LANGUAGE[langOf(goal)]}\n${steps}Elements:\n${list}`,
   };
 }
 
-const CONTENT_VERSION = 14; // must match VERSION in content.js
+const CONTENT_VERSION = 15; // must match VERSION in content.js
 
 // Always inject the current content.js first: it replaces any older copy still running in
 // the page (e.g. a tab opened before the extension was reloaded), and is a no-op if current.
@@ -329,7 +343,7 @@ function showStillTrying(opts) {
   if (opts.kind) return; // background calls (dropdown, scout, understand) stay quiet
   setStatus('Gemma is busy, trying again...', 'busy');
   if (session && session.active) {
-    sendToTab(session.tabId, 'status', { text: 'Still trying...' }).catch(() => {});
+    sendToTab(session.tabId, 'status', { text: t('retrying'), lang: langOf(session.goal) }).catch(() => {});
   }
 }
 
@@ -701,7 +715,7 @@ async function finishSession(tabId, text) {
   session.steps = (session.steps || []).filter((s) => s.n < n).map((s) => ({ ...s, state: 'done' }));
   session.steps.push({ n, text, state: 'finish' });
   setStatus('All done!', 'ok');
-  await sendToTab(tabId, 'done', { text }).catch(() => {});
+  await sendToTab(tabId, 'done', { text, lang: langOf(session.goal) }).catch(() => {});
   await endSession();
 }
 
@@ -727,11 +741,22 @@ async function understandGoal(apiKey, model, goal) {
 }
 
 // The user's language, for the few sentences GuideMe writes itself (menu hints).
-const ROMAN_URDU = /\b(mujhe|mujhy|muje|keliye|kaise|kese|krna|karna|chahiye|chahta|chahti|kya|kahan|batao|dikhao|hai|hy|mein)\b/i;
+const ROMAN_URDU = /\b(mujhe|mujhy|muje|keliye|liye|kaise|kese|kidhar|krna|karna|karni|karein|chahiye|chahta|chahti|kya|kahan|batao|dikhao|hai|hain|hy|mein|ka|ki|ke|ko|se|par|nahi|dakhla|hona|wala|wali|apna|meri|mera)\b/gi;
 function langOf(goal) {
   if (/[\u0600-\u06ff]/.test(goal)) return 'ur';
-  return ROMAN_URDU.test(goal) ? 'roman' : 'en';
+  // Short words like "ka" or "se" also occur in English, so two hits are needed.
+  return (goal.match(ROMAN_URDU) || []).length >= 2 ? 'roman' : 'en';
 }
+
+// Fixed sentences GuideMe writes itself, in the user's language (en, Roman Urdu, Urdu script).
+const TEXT = {
+  reached: { en: 'You have reached your goal.', roman: 'Aap apni manzil tak pohanch gaye.', ur: '\u0622\u067e \u0627\u067e\u0646\u06d2 \u0645\u0642\u0635\u062f \u062a\u06a9 \u067e\u06c1\u0646\u0686 \u06af\u0626\u06d2 \u06c1\u06cc\u06ba\u06d4' },
+  willReach: { en: 'You will reach your goal.', roman: 'Aap apni manzil tak pohanch jayenge.', ur: '\u0622\u067e \u0627\u067e\u0646\u06d2 \u0645\u0642\u0635\u062f \u062a\u06a9 \u067e\u06c1\u0646\u0686 \u062c\u0627\u0626\u06cc\u06ba \u06af\u06d2\u06d4' },
+  noNext: { en: 'I could not find the next step on this page.', roman: 'Is page par agla qadam nahi mila.', ur: '\u0627\u0633 \u0635\u0641\u062d\u06d2 \u067e\u0631 \u0627\u06af\u0644\u0627 \u0645\u0631\u062d\u0644\u06c1 \u0646\u06c1\u06cc\u06ba \u0645\u0644\u0627\u06d4' },
+  reading: { en: 'GuideMe is reading the page...', roman: 'GuideMe page parh raha hai...', ur: 'GuideMe \u0635\u0641\u062d\u06c1 \u067e\u0691\u06be \u0631\u06c1\u0627 \u06c1\u06d2...' },
+  retrying: { en: 'Still trying...', roman: 'Koshish jari hai...', ur: '\u06a9\u0648\u0634\u0634 \u062c\u0627\u0631\u06cc \u06c1\u06d2...' },
+};
+const t = (key, goal = session && session.goal) => TEXT[key][goal ? langOf(goal) : 'en'];
 function menuWords(menu, item) {
   const lang = session ? langOf(session.goal) : 'en';
   if (lang === 'roman') return `${menu} menu mein '${item}' par click karein`;
@@ -791,7 +816,7 @@ async function run(goal, continuing = false) {
 
   setStatus('Reading the page...');
   await ensureContentScript(tab.id);
-  await sendToTab(tab.id, 'status', { text: 'GuideMe is reading the page...' });
+  await sendToTab(tab.id, 'status', { text: t('reading', goal), lang: langOf(goal) });
   const scan = await sendToTab(tab.id, 'scan');
   if (!scan || !Array.isArray(scan.elements)) throw new Error('Page scan returned nothing. Reload the page and try again.');
   const { elements, title, url } = scan;
@@ -821,7 +846,7 @@ async function run(goal, continuing = false) {
   }
 
   // 2. Otherwise ask Gemma now.
-  const cacheKey = `${url}\n${goal}\n${session.history.length}\n${hashString(formatElements(elements, url))}`;
+  const cacheKey = `${url}\n${goal}\n${langOf(goal)}\n${session.history.length}\n${hashString(formatElements(elements, url))}`;
   if (!decision && decisionCache.has(cacheKey)) {
     decision = decisionCache.get(cacheKey);
     log('Cached');
@@ -851,7 +876,7 @@ async function run(goal, continuing = false) {
   const instruction = clean(decision.instruction, 400) || '';
 
   if (progress === 'done' || decision.action === 'finish') {
-    await finishSession(tab.id, instruction || 'You have reached your goal.');
+    await finishSession(tab.id, instruction || t('reached', goal));
     return;
   }
 
@@ -881,7 +906,7 @@ async function run(goal, continuing = false) {
     await sendToTab(tab.id, 'clear');
     log(`Help: ${instruction}`);
     session.lastInstruction = instruction;
-    setCurrentStep(session.step, instruction || 'I could not find the next step on this page.', how, 'help');
+    setCurrentStep(session.step, instruction || t('noNext', goal), how, 'help');
     setStatus('GuideMe needs your help on this page.', 'idle');
   }
 
@@ -931,7 +956,7 @@ function followable(href, pageUrl) {
 
 // One line for the page card: what the user will do on the next page.
 function nextText(prediction) {
-  return prediction.finish ? prediction.instruction || 'You will reach your goal.' : prediction.instruction;
+  return prediction.finish ? prediction.instruction || t('willReach') : prediction.instruction;
 }
 
 // Where the current step leads: the target link, or the item picked inside the menu the target opens.

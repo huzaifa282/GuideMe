@@ -2,7 +2,7 @@
 // A newer version replaces an older copy already running in the page. Message types carry
 // the version, so a stale copy that is still alive never answers a newer panel.
 (() => {
-const VERSION = 14;
+const VERSION = 15;
 if (window.__guidemeVersion === VERSION) return;
 if (window.__guidemeCleanup) window.__guidemeCleanup();
 window.__guidemeVersion = VERSION;
@@ -37,6 +37,7 @@ let clickWatch = null; // removes the click/change listeners on the highlighted 
 let retryTimer = null;
 let nextHint = ''; // what comes after this step (from the panel's look-ahead)
 let nextEl = null; // the card's "Next:" line while an overlay is shown
+let uiLang = 'en'; // language of the user's goal: en | roman | ur (set by the side panel)
 
 // Small animated status pill at the top of the page (Shadow DOM, so site CSS can't touch it).
 function showStatus(text) {
@@ -595,7 +596,7 @@ async function highlight(id, instruction, step, live = false) {
       // The menu would not open: point at the visible trigger instead.
       restoreMenu();
       el = hidden.trigger;
-      if (!named || !instruction.toLowerCase().includes(hidden.menu.toLowerCase())) instruction = `Hover ${hidden.menu}, then click '${hidden.text}'`;
+      if (!named || !instruction.toLowerCase().includes(hidden.menu.toLowerCase())) instruction = hoverWords(hidden.menu, hidden.text);
     }
   }
 
@@ -613,23 +614,25 @@ async function highlight(id, instruction, step, live = false) {
     <div class="card" role="status">
       <div class="step"></div>
       <div class="text"></div>
-      <div class="notice" hidden>Scroll to see the highlighted item</div>
-      <div class="next" hidden><b>Next:</b> <span></span></div>
+      <div class="notice" hidden></div>
+      <div class="next" hidden><b></b> <span></span></div>
       <div class="footer">GuideMe</div>
       <button class="close" type="button" aria-label="Close">×</button>
     </div>`;
   const ring = shadow.querySelector('.ring');
   nextEl = shadow.querySelector('.next');
+  nextEl.querySelector('b').textContent = t('next');
   showNext(nextHint);
   const badge = shadow.querySelector('.badge');
   const card = shadow.querySelector('.card');
   const notice = shadow.querySelector('.notice');
+  notice.textContent = t('scroll');
   const stepNumber = step || 1;
   badge.textContent = stepNumber;
-  shadow.querySelector('.step').textContent = `Step ${stepNumber}`;
+  shadow.querySelector('.step').textContent = `${t('step')} ${stepNumber}`;
   shadow.querySelector('.text').textContent = instruction;
   // Right-to-left scripts (Urdu, Arabic, Hebrew) flip the card.
-  card.dir = /[֐-ࣿ]/.test(instruction) ? 'rtl' : 'ltr';
+  card.dir = uiLang === 'ur' || /[֐-ࣿ]/.test(instruction) ? 'rtl' : 'ltr';
   shadow.querySelector('.close').addEventListener('click', dismissOverlay);
   document.documentElement.appendChild(overlayHost);
   document.addEventListener('keydown', onKeydown, true);
@@ -692,10 +695,26 @@ async function highlight(id, instruction, step, live = false) {
 
 // "Under MENU, click 'ITEM'" in the user's language (en, Roman Urdu, Urdu script).
 function menuWords(menu, item) {
-  const lang = session && session.lang;
+  const lang = uiLang;
   if (lang === 'roman') return `${menu} menu mein '${item}' par click karein`;
   if (lang === 'ur') return `${menu} مینو میں '${item}' پر کلک کریں`;
   return `Under ${menu}, click '${item}'`;
+}
+
+// Fixed card wording in the user's language (en, Roman Urdu, Urdu script).
+const TEXT = {
+  step: { en: 'Step', roman: 'Qadam', ur: 'مرحلہ' },
+  done: { en: 'All done!', roman: 'Ho gaya!', ur: 'مکمل ہو گیا!' },
+  next: { en: 'Next:', roman: 'Agla:', ur: 'اگلا:' },
+  scroll: { en: 'Scroll to see the highlighted item', roman: 'Highlight ki hui cheez dekhne ke liye scroll karein', ur: 'نمایاں چیز دیکھنے کے لیے سکرول کریں' },
+  error: { en: 'Something went wrong', roman: 'Kuch ghalat ho gaya', ur: 'کچھ غلط ہو گیا' },
+  retry: { en: 'Retry', roman: 'Dobara koshish', ur: 'دوبارہ کوشش کریں' },
+};
+const t = (key) => TEXT[key][uiLang] || TEXT[key].en;
+function hoverWords(menu, item) {
+  if (uiLang === 'roman') return `${menu} par mouse le jayein, phir '${item}' par click karein`;
+  if (uiLang === 'ur') return `${menu} پر ماؤس لے جائیں، پھر '${item}' پر کلک کریں`;
+  return `Hover ${menu}, then click '${item}'`;
 }
 
 function showNext(text) {
@@ -1003,9 +1022,9 @@ function showDoneCard(text) {
       <button class="close" type="button" aria-label="Close">×</button>
     </div>`;
   const card = shadow.querySelector('.card');
-  shadow.querySelector('.step').textContent = 'All done!';
+  shadow.querySelector('.step').textContent = t('done');
   shadow.querySelector('.text').textContent = text;
-  card.dir = /[֐-ࣿ]/.test(text) ? 'rtl' : 'ltr';
+  card.dir = uiLang === 'ur' || /[֐-ࣿ]/.test(text) ? 'rtl' : 'ltr';
   shadow.querySelector('.close').addEventListener('click', dismissOverlay);
   document.documentElement.appendChild(overlayHost);
   document.addEventListener('keydown', onKeydown, true);
@@ -1024,13 +1043,16 @@ function showErrorCard(text) {
   shadow.innerHTML = `
     <style>${OVERLAY_CSS}</style>
     <div class="card" role="alert">
-      <div class="step error">Something went wrong</div>
+      <div class="step error"></div>
       <div class="text"></div>
-      <button class="retry" type="button">Retry</button>
+      <button class="retry" type="button"></button>
       <div class="footer">GuideMe</div>
       <button class="close" type="button" aria-label="Close">×</button>
     </div>`;
+  shadow.querySelector('.step').textContent = t('error');
+  shadow.querySelector('.retry').textContent = t('retry');
   shadow.querySelector('.text').textContent = text;
+  shadow.querySelector('.card').dir = uiLang === 'ur' ? 'rtl' : 'ltr';
   shadow.querySelector('.close').addEventListener('click', dismissOverlay);
   shadow.querySelector('.retry').addEventListener('click', () => {
     dismissOverlay();
@@ -1041,6 +1063,7 @@ function showErrorCard(text) {
 }
 
 function onMessage(message, sender, sendResponse) {
+  if (message.lang) uiLang = message.lang; // every panel message may carry the goal's language
   if (message.type === `guideme${VERSION}:scan`) {
     sendResponse({ elements: scanElements(), title: document.title, url: location.href, version: VERSION });
   } else if (message.type === `guideme${VERSION}:next`) {
