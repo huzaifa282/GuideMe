@@ -1,20 +1,68 @@
-# GuideMe — Show me where to click
+<div align="center">
 
-**An open-source Chrome extension that guides anyone through any website step by step, in English or Urdu, powered by Google's open-weight Gemma 4.**
+# 🧭 GuideMe
 
-## 1. The problem
+### Show me where to click.
+
+**An open-source Chrome extension that guides anyone through any website, step by step, in English or Urdu, powered by Google's open-weight Gemma 4.**
+
+<p>
+  <img alt="Chrome Extension" src="https://img.shields.io/badge/Chrome%20Extension-Manifest%20V3-4285F4?logo=googlechrome&logoColor=white">
+  <img alt="Gemma 4" src="https://img.shields.io/badge/Model-Gemma%204-8E75B2?logo=googlegemini&logoColor=white">
+  <img alt="Languages" src="https://img.shields.io/badge/Languages-English%20%7C%20Urdu%20%7C%20Roman%20Urdu-1a7f37">
+  <img alt="License" src="https://img.shields.io/badge/License-Apache%202.0-D22128?logo=apache&logoColor=white">
+  <img alt="Hacktoberfest" src="https://img.shields.io/badge/Hacktoberfest-Hack%20Day%20Faisalabad%202026-FF8AE2?logo=hacktoberfest&logoColor=white">
+</p>
+
+<p>
+  <a href="https://huzaifa282.github.io/GuideMe/"><b>Setup page</b></a> ·
+  <a href="#-demo">Demo</a> ·
+  <a href="#-how-it-works">How it works</a> ·
+  <a href="#-tech-stack">Tech stack</a> ·
+  <a href="#-install-and-run">Install</a> ·
+  <a href="#-roadmap">Roadmap</a>
+</p>
+
+</div>
+
+---
+
+## 📖 Table of contents
+
+1. [The problem](#-the-problem)
+2. [Demo](#-demo)
+3. [How it works](#-how-it-works)
+4. [Features](#-features)
+5. [Tech stack](#-tech-stack)
+6. [Install and run](#-install-and-run)
+7. [Project structure](#-project-structure)
+8. [Privacy](#-privacy)
+9. [Known limitations](#-known-limitations)
+10. [Roadmap](#-roadmap)
+11. [License](#-license)
+
+---
+
+## 🎯 The problem
 
 Students, parents and first-time users get lost on university and government portals. Menus hide what you need, the right link sits in the footer, and one wrong click sends you back to the start. A good example is applying for undergraduate admission on the UAF portal: the steps exist, but finding them is the hard part.
 
 AI agents solve this by doing the task *for* you. GuideMe does the opposite: it **teaches you to do it yourself**. It points at the right button, tells you in a sentence what to do and why, and waits for you to click.
 
-## 2. Demo
+| | AI agents | **GuideMe** |
+|---|---|---|
+| Who clicks? | The agent | **You** |
+| What you learn | Nothing, it just happens | **Where things are and why** |
+| Control | Hand over your browser | **You stay in charge** |
+| Next time | You need the agent again | **You can do it alone** |
 
-> 🎬 **Demo GIF / video: coming soon.**
+## 🎬 Demo
+
+> **Demo GIF / video: coming soon.**
 >
 > <!-- TODO: replace this block with a GIF or a video link, e.g. [![Demo](demo.gif)](https://...) -->
 
-## 3. How it works
+## ⚙️ How it works
 
 GuideMe runs as a side panel (the "orchestrator") next to the page. Each step goes through the same pipeline:
 
@@ -60,6 +108,11 @@ GuideMe runs as a side panel (the "orchestrator") next to the page. Each step go
         (up to 8 steps, with the history of what you did)
 ```
 
+<details>
+<summary><b>Pipeline details (click to expand)</b></summary>
+
+<br>
+
 - **Scanner.** The content script lists visible buttons, links, inputs and selects across the *whole* page (not just the viewport), tags each with a zone (header, main, footer, dialog), and also collects non-clickable info such as phone numbers, emails and addresses. Links inside hover menus are included, together with the menu that opens them. If a modal is open, only the modal is sent.
 - **Ranker.** To keep requests small and fast, items are scored locally against the goal (word overlap plus a small synonym map, for example *contact* → phone, email, contact us; *apply* → admission, application, register). The top 60 go to the model, and everything currently in view is always included.
 - **Navigator.** One Gemma 4 call does two jobs: it judges whether your last click moved you toward the goal and chooses the next element. It also pre-picks the best item inside each relevant dropdown, so when you hover a menu the answer is already there.
@@ -67,17 +120,74 @@ GuideMe runs as a side panel (the "orchestrator") next to the page. Each step go
 - **Loop across pages.** The side panel keeps the goal, step number and history in `chrome.storage.session`. After your click it waits for the next page, rescans, and asks the Navigator again. The session ends when the goal is done, after 8 steps, or when you press **Stop**.
 - **Resilience.** Failed calls (HTTP 5xx, network errors) are retried after 1 s, 3 s and 6 s. After two failures on one model GuideMe automatically switches between `gemma-4-26b-a4b-it` and `gemma-4-31b-it` for the rest of the session. While it retries you see "Still trying..."; only when everything fails does a **Retry** button appear, which resumes from the current step.
 
-## 4. Features
+</details>
 
-- **Roman Urdu, Urdu and English goals.** Type what you want in the language you think in. The instruction card supports right-to-left text.
-- **Spotlight highlight.** The page is dimmed around a pulsing ring; hover the target and the dim fades so menus stay readable. Press Esc or the × to dismiss.
-- **Dropdown awareness.** Hidden menu items are found, opened and highlighted; menus you open yourself are recognised live, and the right option is highlighted instantly.
-- **Footer and info answers.** Ask for a phone number, email or address and GuideMe highlights it on the page and puts the actual answer in the instruction. Footer links are searched too.
-- **Multi-step guidance.** Goals that take several clicks across several pages are followed from start to finish, with a final "All done!" card.
-- **Response cache.** Repeating the same request on the same page is answered instantly from memory.
-- **Links stay in your tab.** Highlighted links that would open a new tab are kept in the current tab so you never lose your place.
+## ✨ Features
 
-## 5. Install and run
+| | Feature | What it does |
+|---|---|---|
+| 🌐 | **Roman Urdu, Urdu and English goals** | Type what you want in the language you think in. The instruction card supports right-to-left text. |
+| 🔦 | **Spotlight highlight** | The page is dimmed around a pulsing ring; hover the target and the dim fades so menus stay readable. Press Esc or the × to dismiss. |
+| 📂 | **Dropdown awareness** | Hidden menu items are found, opened and highlighted; menus you open yourself are recognised live, and the right option is highlighted instantly. |
+| 📞 | **Footer and info answers** | Ask for a phone number, email or address and GuideMe highlights it on the page and puts the actual answer in the instruction. Footer links are searched too. |
+| 🪜 | **Multi-step guidance** | Goals that take several clicks across several pages are followed from start to finish, with a final "All done!" card. |
+| ⚡ | **Response cache** | Repeating the same request on the same page is answered instantly from memory. |
+| 🔒 | **Links stay in your tab** | Highlighted links that would open a new tab are kept in the current tab so you never lose your place. |
+| 🔁 | **Retries and model fallback** | Automatic retries and switching between two Gemma 4 models when the API misbehaves. |
+
+## 🧰 Tech stack
+
+GuideMe has no build step, no framework and no backend. It is plain web technology running inside Chrome, talking directly to Google's Gemini API.
+
+<div align="center">
+
+<table>
+  <tr>
+    <td align="center" width="140"><img src="https://cdn.simpleicons.org/googlechrome" width="48" height="48" alt="Chrome"><br><b>Chrome</b><br><sub>Extension platform, Manifest V3</sub></td>
+    <td align="center" width="140"><img src="https://cdn.simpleicons.org/javascript" width="48" height="48" alt="JavaScript"><br><b>JavaScript</b><br><sub>Vanilla ES6+, no bundler</sub></td>
+    <td align="center" width="140"><img src="https://cdn.simpleicons.org/html5" width="48" height="48" alt="HTML5"><br><b>HTML5</b><br><sub>Side panel and options UI</sub></td>
+    <td align="center" width="140"><img src="https://cdn.simpleicons.org/css3" width="48" height="48" alt="CSS3"><br><b>CSS3</b><br><sub>Styling, RTL support</sub></td>
+  </tr>
+  <tr>
+    <td align="center" width="140"><img src="https://cdn.simpleicons.org/googlegemini" width="48" height="48" alt="Gemma / Gemini"><br><b>Gemma 4</b><br><sub>Open-weight model by Google</sub></td>
+    <td align="center" width="140"><img src="https://cdn.simpleicons.org/google" width="48" height="48" alt="Google AI Studio"><br><b>Gemini API</b><br><sub>Hosted inference, free tier key</sub></td>
+    <td align="center" width="140"><img src="https://cdn.simpleicons.org/github" width="48" height="48" alt="GitHub"><br><b>GitHub</b><br><sub>Source hosting and releases</sub></td>
+    <td align="center" width="140"><img src="https://cdn.simpleicons.org/githubpages" width="48" height="48" alt="GitHub Pages"><br><b>GitHub Pages</b><br><sub>Setup page in <code>docs/</code></sub></td>
+  </tr>
+</table>
+
+</div>
+
+### What we used, and where
+
+| Layer | Technology | Used for |
+|---|---|---|
+| Platform | <img src="https://cdn.simpleicons.org/googlechrome" width="16" height="16"> Chrome Extension, **Manifest V3** | Packaging, permissions, service worker |
+| UI shell | <img src="https://cdn.simpleicons.org/googlechrome" width="16" height="16"> **Side Panel API** (`chrome.sidePanel`) | The orchestrator UI that stays open while you browse |
+| Page access | <img src="https://cdn.simpleicons.org/javascript" width="16" height="16"> **Content script** (`content.js`) | Scanning the DOM and drawing the highlight |
+| Overlay | <img src="https://cdn.simpleicons.org/html5" width="16" height="16"> **Shadow DOM** | Spotlight, ring and card that never clash with the host page's CSS |
+| State | <img src="https://cdn.simpleicons.org/googlechrome" width="16" height="16"> `chrome.storage.session` / `local` | Session history (session) and API key plus model choice (local) |
+| Background | <img src="https://cdn.simpleicons.org/googlechrome" width="16" height="16"> **Service worker** (`background.js`) | Opens the side panel on icon click |
+| AI model | <img src="https://cdn.simpleicons.org/googlegemini" width="16" height="16"> **Gemma 4** (`gemma-4-26b-a4b-it`, `gemma-4-31b-it`) | Verifying clicks, choosing the next element, writing instructions |
+| AI access | <img src="https://cdn.simpleicons.org/google" width="16" height="16"> **Gemini API** (`generativelanguage.googleapis.com`) | REST calls straight from the browser |
+| Ranking | <img src="https://cdn.simpleicons.org/javascript" width="16" height="16"> Local scorer with a synonym map | Trimming the page to the 60 most relevant items before the model call |
+| Hosting | <img src="https://cdn.simpleicons.org/githubpages" width="16" height="16"> GitHub Pages | Download and setup guide |
+| License | <img src="https://cdn.simpleicons.org/apache" width="16" height="16"> Apache 2.0 | Open source, permissive |
+
+### Third-party services and apps
+
+<p>
+  <a href="https://aistudio.google.com/apikey"><img alt="Google AI Studio" src="https://img.shields.io/badge/Google%20AI%20Studio-API%20key-4285F4?logo=google&logoColor=white"></a>
+  <a href="https://ai.google.dev/gemma"><img alt="Gemma" src="https://img.shields.io/badge/Gemma%204-open%20weights-8E75B2?logo=googlegemini&logoColor=white"></a>
+  <a href="https://ai.google.dev/gemini-api/docs"><img alt="Gemini API" src="https://img.shields.io/badge/Gemini%20API-REST-1A73E8?logo=googlegemini&logoColor=white"></a>
+  <a href="https://developer.chrome.com/docs/extensions"><img alt="Chrome Extensions" src="https://img.shields.io/badge/Chrome%20Extensions-MV3-4285F4?logo=googlechrome&logoColor=white"></a>
+  <a href="https://github.com/huzaifa282/GuideMe"><img alt="GitHub" src="https://img.shields.io/badge/GitHub-source-181717?logo=github&logoColor=white"></a>
+  <a href="https://huzaifa282.github.io/GuideMe/"><img alt="GitHub Pages" src="https://img.shields.io/badge/GitHub%20Pages-setup%20page-222?logo=githubpages&logoColor=white"></a>
+</p>
+
+> **No npm packages.** GuideMe ships zero runtime dependencies, so there is nothing to install or audit besides the extension itself.
+
+## 🚀 Install and run
 
 GuideMe is a Chrome extension that you load yourself, so it takes about three minutes and needs **Google Chrome 116 or newer**. (A website cannot install a Chrome extension by itself, because Chrome only allows one-click installs from the Chrome Web Store.) Each person uses their own free Gemini API key.
 
@@ -121,13 +231,30 @@ Open the **[GuideMe setup page](https://huzaifa282.github.io/GuideMe/)** for a d
 | Nothing is highlighted | The page may still be loading, or the content is inside an iframe. Wait a moment and press Start again. |
 | The panel seems to ignore a code change | Reload the extension and reopen the side panel. |
 
-## 6. Privacy
+## 🗂️ Project structure
+
+```
+GuideMe/
+├── manifest.json     Extension manifest (MV3), permissions, entry points
+├── background.js     Service worker: opens the side panel on icon click
+├── sidepanel.html    Side panel UI (goal input, status, Stop / Retry)
+├── sidepanel.css     Side panel styles
+├── sidepanel.js      Orchestrator: scan -> rank -> Gemma -> highlight loop
+├── content.js        Page scanner and Shadow DOM highlight overlay
+├── options.html      Settings page (API key, model)
+├── options.js        Saves settings to chrome.storage.local
+├── env.example.js    Template for a local, git-ignored API key file
+├── docs/index.html   GitHub Pages setup and download page
+└── LICENSE           Apache 2.0
+```
+
+## 🔐 Privacy
 
 - Your API key is stored only in your browser (`chrome.storage.local`, or the local `env.js` file if you use it). It is never committed to the repo.
 - GuideMe has **no server** and stores no data anywhere except your own browser.
 - To work, each request sends the **page title, URL, your goal, and short texts of buttons, links and info snippets** directly from your browser to Google's Gemini API. Do not use GuideMe on pages that show information you would not want sent there. See Google's Gemini API terms for how Google handles API requests.
 
-## 7. Known limitations
+## ⚠️ Known limitations
 
 - **Free-tier API.** Responses can be slow, and the free tier sometimes returns HTTP 500 errors. GuideMe retries and switches models, but a bad moment can still end in the Retry button.
 - **Complex forms.** Multi-field forms, custom widgets and pages that rebuild themselves constantly may be guided less accurately.
@@ -135,15 +262,23 @@ Open the **[GuideMe setup page](https://huzaifa282.github.io/GuideMe/)** for a d
 - **Non-English goals.** Gemma understands Urdu and Roman Urdu, but the local ranker's synonym map is English-only, so ranking helps less for those goals, and nothing yet forces replies in Urdu.
 - **Restricted pages.** Chrome does not allow extensions on `chrome://` pages and the Chrome Web Store.
 
-## 8. Roadmap
+## 🛣️ Roadmap
 
-- Look-ahead prefetch: prepare the next page's answer before you click.
-- Self-hosted or on-device Gemma, so nothing leaves the machine.
-- Screenshot (vision) mode for pages that cannot be read as text.
-- More languages, with replies written in the language of the goal.
+- [ ] Look-ahead prefetch: prepare the next page's answer before you click.
+- [ ] Self-hosted or on-device Gemma, so nothing leaves the machine.
+- [ ] Screenshot (vision) mode for pages that cannot be read as text.
+- [ ] More languages, with replies written in the language of the goal.
 
-## 9. License
+## 📄 License
 
 Apache License 2.0. See [LICENSE](LICENSE).
 
-Built at **Hacktoberfest Hack Day Faisalabad 2026**.
+---
+
+<div align="center">
+
+Built with ❤️ at **Hacktoberfest Hack Day Faisalabad 2026**
+
+<img alt="Hacktoberfest" src="https://img.shields.io/badge/Hacktoberfest-2026-FF8AE2?logo=hacktoberfest&logoColor=white">
+
+</div>
