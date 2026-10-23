@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>GuideMe Options</title>
+  <link rel="stylesheet" href="sidepanel.css">
+</head>
+<body>
+  <h1>GuideMe Options</h1>
+  <label for="key">Gemini API key</label>
+  <input id="key" type="password" placeholder="Paste your API key" autocomplete="off">
+  <label for="model">Model</label>
+  <select id="model">
+    <option value="gemma-4-26b-a4b-it">gemma-4-26b-a4b-it</option>
+    <option value="gemma-4-31b-it">gemma-4-31b-it</option>
+  </select>
+  <button id="save">Save</button>
+  <div id="status"></div>
+  <p>The key is stored only in this browser (chrome.storage.local).</p>
+  <h2>Response times</h2>
+  <pre id="timings">No calls yet.</pre>
+  <button id="reset-timings">Reset response times</button>
+  <script src="options.js"></script>
+</body>
+</html>

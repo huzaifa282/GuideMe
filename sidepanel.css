@@ -1,0 +1,42 @@
+body {
+  font-family: system-ui, sans-serif;
+  margin: 0;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  height: 100vh;
+  box-sizing: border-box;
+}
+
+h1 {
+  font-size: 18px;
+  margin: 0;
+}
+
+label {
+  font-size: 13px;
+}
+
+input,
+button {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 8px;
+  font-size: 14px;
+}
+
+button {
+  cursor: pointer;
+}
+
+#log {
+  flex: 1;
+  overflow-y: auto;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  padding: 8px;
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 12px;
+  background: #fafafa;
+}
