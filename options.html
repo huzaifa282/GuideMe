@@ -2,24 +2,45 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <title>GuideMe Options</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>GuideMe Settings</title>
   <link rel="stylesheet" href="sidepanel.css">
+  <link rel="stylesheet" href="options.css">
 </head>
 <body>
-  <h1>GuideMe Options</h1>
-  <label for="key">Gemini API key</label>
-  <input id="key" type="password" placeholder="Paste your API key" autocomplete="off">
-  <label for="model">Model</label>
-  <select id="model">
-    <option value="gemma-4-26b-a4b-it">gemma-4-26b-a4b-it</option>
-    <option value="gemma-4-31b-it">gemma-4-31b-it</option>
-  </select>
-  <button id="save">Save</button>
-  <div id="status"></div>
-  <p>The key is stored only in this browser (chrome.storage.local).</p>
-  <h2>Response times</h2>
-  <pre id="timings">No calls yet.</pre>
-  <button id="reset-timings">Reset response times</button>
+  <main class="settings">
+    <header class="head">
+      <img src="icons/logo.svg" alt="" width="44" height="44">
+      <div>
+        <h1>GuideMe settings</h1>
+        <p class="small">Your key stays in this browser (chrome.storage.local). GuideMe has no server.</p>
+      </div>
+    </header>
+
+    <section class="card">
+      <label for="key">Gemini API key</label>
+      <input id="key" type="password" placeholder="Paste your API key" autocomplete="off">
+      <p class="small">Get a free key at <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a>.</p>
+
+      <label for="model">Gemma model</label>
+      <select id="model">
+        <option value="gemma-4-26b-a4b-it">gemma-4-26b-a4b-it (faster, default)</option>
+        <option value="gemma-4-31b-it">gemma-4-31b-it (stronger)</option>
+      </select>
+      <p class="small">If one model is busy, GuideMe switches to the other automatically.</p>
+
+      <label class="check"><input id="lookahead" type="checkbox" checked> Look ahead: read the next pages in the background so the next steps appear instantly</label>
+
+      <button id="save" class="primary" type="button">Save</button>
+      <p id="status" class="saved" role="status"></p>
+    </section>
+
+    <details class="card">
+      <summary>Response times</summary>
+      <pre id="timings">No calls yet.</pre>
+      <button id="reset-timings" class="secondary" type="button">Reset response times</button>
+    </details>
+  </main>
   <script src="options.js"></script>
 </body>
 </html>

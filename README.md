@@ -1,6 +1,8 @@
 <div align="center">
 
-# 🧭 GuideMe
+<img src="icons/logo.svg" alt="GuideMe logo" width="96" height="96">
+
+# GuideMe
 
 ### Show me where to click.
 
@@ -91,9 +93,15 @@ GuideMe runs as a side panel (the "orchestrator") next to the page. Each step go
    | 3. Gemma 4 Navigator  (Gemini API)                       |
    |    - verifies the last click: on track / off track / done|
    |    - picks the ONE next element                          |
-   |    - writes a short instruction                          |
+   |    - writes a short instruction in the user's language   |
    |    - prefetches the best item of each relevant dropdown  |
    +--------------------------+-------------------------------+
+                              |
+                              +------> 3b. Look-ahead scout (background)
+                              |        fetches the page the highlighted link
+                              |        leads to, asks Gemma for the step
+                              |        there, up to 3 pages ahead
+                              v
                               |
                               v
    +----------------------------------------------------------+
@@ -104,8 +112,10 @@ GuideMe runs as a side panel (the "orchestrator") next to the page. Each step go
                     you click the highlighted item
                               |
                               v
-        page changes  -->  rescan  -->  back to step 3
-        (up to 8 steps, with the history of what you did)
+        page changes  -->  rescan  -->  look-ahead answer ready?
+                                        yes: highlight instantly
+                                        no:  back to step 3
+        (up to 12 steps, with the history of what you did)
 ```
 
 <details>
@@ -113,12 +123,14 @@ GuideMe runs as a side panel (the "orchestrator") next to the page. Each step go
 
 <br>
 
-- **Scanner.** The content script lists visible buttons, links, inputs and selects across the *whole* page (not just the viewport), tags each with a zone (header, main, footer, dialog), and also collects non-clickable info such as phone numbers, emails and addresses. Links inside hover menus are included, together with the menu that opens them. If a modal is open, only the modal is sent.
-- **Ranker.** To keep requests small and fast, items are scored locally against the goal (word overlap plus a small synonym map, for example *contact* → phone, email, contact us; *apply* → admission, application, register). The top 60 go to the model, and everything currently in view is always included.
+- **Goal understanding.** A small Gemma call turns the goal (English, Urdu script or Roman Urdu) into a short English task and keywords. The panel shows it ("Understood: Apply for undergraduate admission") and the ranker uses the keywords, so Urdu goals rank as well as English ones.
+- **Scanner.** The content script lists visible buttons, links, inputs, selects and text fields across the *whole* page (not just the viewport), tags each with a zone (header, main, footer, dialog), records **where each link goes** and **which section it sits in**, and also collects non-clickable info: phone numbers, emails, addresses, headings and short blocks of page text (fees, dates, requirements). Form fields are described by their labels; what you type is never sent. Links inside hover menus are included, together with the menu that opens them. If a modal is open, only the modal is sent.
+- **Ranker.** To keep requests small and fast, items are scored locally against the goal and Gemma's keywords (word overlap on the text, the link path and the section, plus a synonym map that includes Roman Urdu words such as *dakhla* and *natija*). The 60 best items go to the model, together with what is currently on screen; page text is only sent when it matches the goal.
 - **Navigator.** One Gemma 4 call does two jobs: it judges whether your last click moved you toward the goal and chooses the next element. It also pre-picks the best item inside each relevant dropdown, so when you hover a menu the answer is already there.
 - **Highlight.** A Shadow DOM overlay dims the page, rings the target, numbers the step and shows the instruction at the edge of the screen. Hidden dropdown items are opened for you, or the menu trigger is highlighted with "Hover X, then click Y".
-- **Loop across pages.** The side panel keeps the goal, step number and history in `chrome.storage.session`. After your click it waits for the next page, rescans, and asks the Navigator again. The session ends when the goal is done, after 8 steps, or when you press **Stop**.
-- **Resilience.** Failed calls (HTTP 5xx, network errors) are retried after 1 s, 3 s and 6 s. After two failures on one model GuideMe automatically switches between `gemma-4-26b-a4b-it` and `gemma-4-31b-it` for the rest of the session. While it retries you see "Still trying..."; only when everything fails does a **Retry** button appear, which resumes from the current step.
+- **Look-ahead scout.** While you read the current step, the side panel fetches the page the highlighted link leads to (as plain HTML, without your cookies), extracts its links, buttons and text, and asks Gemma what you will need to do there, chaining up to three pages ahead. The upcoming steps appear in the panel as **Up next**, the page card shows **Next: ...**, and when you arrive the highlight appears **instantly** (marked *Instant*), with no wait for the model. Links that could change something (log out, delete) and files are never followed; pages built entirely by JavaScript fall back to a normal Gemma call.
+- **Loop across pages.** The side panel keeps the goal, step number, history and step timeline in `chrome.storage.session`. After your click it waits for the next page, rescans, and either uses the look-ahead answer or asks the Navigator again. If you wander off on your own, that is recorded too, so Gemma can lead you back. The session ends when the goal is done, after 12 steps, or when you press **Stop**.
+- **Resilience.** Failed calls (HTTP 5xx, 429 rate limits, network errors) are retried after 1 s, 3 s and 6 s. A rate limit switches models at once (each model has its own quota); otherwise two failures on one model switch between `gemma-4-26b-a4b-it` and `gemma-4-31b-it` for the rest of the session. Gemma's answer is read with a brace-aware JSON parser, so extra words around the JSON never break a step. When everything fails, a plain-language message and a **Retry** button appear, and Retry resumes from the current step.
 
 </details>
 
@@ -126,11 +138,14 @@ GuideMe runs as a side panel (the "orchestrator") next to the page. Each step go
 
 | | Feature | What it does |
 |---|---|---|
-| 🌐 | **Roman Urdu, Urdu and English goals** | Type what you want in the language you think in. The instruction card supports right-to-left text. |
+| 🌐 | **Roman Urdu, Urdu and English goals** | Type what you want in the language you think in. Gemma replies in the same language, and the instruction card supports right-to-left text. |
+| 🔮 | **Look-ahead** | GuideMe reads the next pages in the background, shows the upcoming steps before you get there, and highlights them instantly when you arrive. |
+| 🪧 | **Step timeline** | The side panel shows done, current and upcoming steps instead of a log; the technical log is still there under *Activity log*. |
 | 🔦 | **Spotlight highlight** | The page is dimmed around a pulsing ring; hover the target and the dim fades so menus stay readable. Press Esc or the × to dismiss. |
 | 📂 | **Dropdown awareness** | Hidden menu items are found, opened and highlighted; menus you open yourself are recognised live, and the right option is highlighted instantly. |
 | 📞 | **Footer and info answers** | Ask for a phone number, email or address and GuideMe highlights it on the page and puts the actual answer in the instruction. Footer links are searched too. |
 | 🪜 | **Multi-step guidance** | Goals that take several clicks across several pages are followed from start to finish, with a final "All done!" card. |
+| 📝 | **Forms and page text** | Guides you field by field through forms (labels only, never what you type) and can answer from page text, such as a fee or a deadline. |
 | ⚡ | **Response cache** | Repeating the same request on the same page is answered instantly from memory. |
 | 🔒 | **Links stay in your tab** | Highlighted links that would open a new tab are kept in the current tab so you never lose your place. |
 | 🔁 | **Retries and model fallback** | Automatic retries and switching between two Gemma 4 models when the API misbehaves. |
@@ -203,13 +218,13 @@ Open the **[GuideMe setup page](https://huzaifa282.github.io/GuideMe/)** for a d
 3. Open `chrome://extensions` in Chrome and switch on **Developer mode** (top right).
 4. Click **Load unpacked** and select the folder that contains `manifest.json` (`GuideMe-main` if you used the ZIP, `GuideMe` if you cloned).
 5. Click the puzzle-piece icon in the Chrome toolbar and **pin GuideMe**.
-6. Open the extension's **Options** page (right-click the GuideMe icon → *Options*, or use the *Options* link in the side panel), paste your API key and press **Save**. You can also choose the model there.
+6. Open **Settings** (the gear in the side panel, or right-click the GuideMe icon → *Options*), paste your API key and press **Save**. You can also choose the model and switch the look-ahead off there.
 
 ### Using GuideMe
 
 1. Open the website you need help with (a normal web page, not a `chrome://` page).
 2. **Click the GuideMe icon.** The side panel opens and stays open while you click around the page.
-3. Type what you want to do (for example *"apply for undergraduate admission"*) and press **Start**.
+3. Type what you want to do (for example *"apply for undergraduate admission"*, or tap an example) and press **Guide me**.
 4. GuideMe highlights the next thing to click and shows a short instruction at the edge of the screen.
 5. **Click the highlighted item.** GuideMe moves on to the next step by itself, even when the click opens a new page. When the goal is reached you will see an **All done!** card.
 6. Press **Stop** at any time to end the session. Press **Esc** or the **×** on the card to hide a highlight.
@@ -224,9 +239,9 @@ Open the **[GuideMe setup page](https://huzaifa282.github.io/GuideMe/)** for a d
 
 | What you see | What to do |
 |---|---|
-| `Add your API key in Options` | Open Options, paste your key from <https://aistudio.google.com/apikey> and Save. |
+| `Add your Gemini API key in Settings first` | Open Settings (gear icon), paste your key from <https://aistudio.google.com/apikey> and Save. |
 | `Cannot run on this page` | Chrome blocks extensions on `chrome://` pages and the Chrome Web Store. Open a normal website. |
-| `Still trying...` | The API is slow or returned an error. GuideMe retries and may switch models by itself. |
+| `Gemma is busy, trying again...` | The API is slow or returned an error. GuideMe retries and may switch models by itself. |
 | A **Retry** button appears | Every retry failed. Press Retry to continue from the same step without starting over. |
 | Nothing is highlighted | The page may still be loading, or the content is inside an iframe. Wait a moment and press Start again. |
 | The panel seems to ignore a code change | Reload the extension and reopen the side panel. |
@@ -237,12 +252,15 @@ Open the **[GuideMe setup page](https://huzaifa282.github.io/GuideMe/)** for a d
 GuideMe/
 ├── manifest.json     Extension manifest (MV3), permissions, entry points
 ├── background.js     Service worker: opens the side panel on icon click
-├── sidepanel.html    Side panel UI (goal input, status, Stop / Retry)
-├── sidepanel.css     Side panel styles
-├── sidepanel.js      Orchestrator: scan -> rank -> Gemma -> highlight loop
+├── sidepanel.html    Side panel UI (goal, status, step timeline, activity log)
+├── sidepanel.css     Side panel styles (light and dark)
+├── sidepanel.js      Orchestrator: understand -> scan -> rank -> Gemma -> highlight,
+│                     plus the look-ahead scout
 ├── content.js        Page scanner and Shadow DOM highlight overlay
-├── options.html      Settings page (API key, model)
+├── options.html      Settings page (API key, model, look-ahead)
+├── options.css       Settings page styles
 ├── options.js        Saves settings to chrome.storage.local
+├── icons/            Logo (SVG) and toolbar icons (PNG)
 ├── env.example.js    Template for a local, git-ignored API key file
 ├── docs/index.html   GitHub Pages setup and download page
 └── LICENSE           Apache 2.0
@@ -252,22 +270,24 @@ GuideMe/
 
 - Your API key is stored only in your browser (`chrome.storage.local`, or the local `env.js` file if you use it). It is never committed to the repo.
 - GuideMe has **no server** and stores no data anywhere except your own browser.
-- To work, each request sends the **page title, URL, your goal, and short texts of buttons, links and info snippets** directly from your browser to Google's Gemini API. Do not use GuideMe on pages that show information you would not want sent there. See Google's Gemini API terms for how Google handles API requests.
+- To work, each request sends the **page title, URL, your goal, and short texts of buttons, links, link paths, field labels and relevant page text** directly from your browser to Google's Gemini API. What you type into form fields is never sent.
+- The look-ahead downloads the next pages the way a link preview would: **without your cookies**, only for links GuideMe is about to show you, and never for log-out, delete or file links. You can turn it off in Settings. Do not use GuideMe on pages that show information you would not want sent there. See Google's Gemini API terms for how Google handles API requests.
 
 ## ⚠️ Known limitations
 
 - **Free-tier API.** Responses can be slow, and the free tier sometimes returns HTTP 500 errors. GuideMe retries and switches models, but a bad moment can still end in the Retry button.
 - **Complex forms.** Multi-field forms, custom widgets and pages that rebuild themselves constantly may be guided less accurately.
 - **Iframe-based apps.** Pages that render inside iframes or canvases (Office Online, Google Docs and similar) cannot be scanned.
-- **Non-English goals.** Gemma understands Urdu and Roman Urdu, but the local ranker's synonym map is English-only, so ranking helps less for those goals, and nothing yet forces replies in Urdu.
+- **Look-ahead on logged-in or JavaScript-only pages.** The scout reads pages without your cookies and without running their scripts, so behind a login or on single-page apps it stops and GuideMe asks Gemma when you arrive instead.
 - **Restricted pages.** Chrome does not allow extensions on `chrome://` pages and the Chrome Web Store.
 
 ## 🛣️ Roadmap
 
-- [ ] Look-ahead prefetch: prepare the next page's answer before you click.
+- [x] Look-ahead prefetch: prepare the next page's answer before you click.
+- [x] Replies in the language of the goal.
 - [ ] Self-hosted or on-device Gemma, so nothing leaves the machine.
 - [ ] Screenshot (vision) mode for pages that cannot be read as text.
-- [ ] More languages, with replies written in the language of the goal.
+- [ ] More languages (Punjabi, Sindhi, Pashto).
 
 ## 📄 License
 

@@ -3,6 +3,7 @@ const modelSelect = document.getElementById('model');
 const saveButton = document.getElementById('save');
 const statusEl = document.getElementById('status');
 const timingsEl = document.getElementById('timings');
+const lookaheadBox = document.getElementById('lookahead');
 
 function renderTimings(timings) {
   const rows = Object.entries(timings || {}).map(([model, t]) => {
@@ -12,15 +13,16 @@ function renderTimings(timings) {
   timingsEl.textContent = rows.length ? rows.join('\n') : 'No calls yet.';
 }
 
-chrome.storage.local.get(['apiKey', 'model', 'timings']).then(({ apiKey, model, timings }) => {
+chrome.storage.local.get(['apiKey', 'model', 'timings', 'lookahead']).then(({ apiKey, model, timings, lookahead }) => {
   if (apiKey) keyInput.value = apiKey;
   if (model) modelSelect.value = model;
+  lookaheadBox.checked = lookahead !== false;
   renderTimings(timings);
 });
 
 saveButton.addEventListener('click', async () => {
-  await chrome.storage.local.set({ apiKey: keyInput.value.trim(), model: modelSelect.value });
-  statusEl.textContent = 'Saved.';
+  await chrome.storage.local.set({ apiKey: keyInput.value.trim(), model: modelSelect.value, lookahead: lookaheadBox.checked });
+  statusEl.textContent = 'Saved. You can close this tab.';
 });
 
 document.getElementById('reset-timings').addEventListener('click', async () => {

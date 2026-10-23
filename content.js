@@ -2,16 +2,18 @@
 // A newer version replaces an older copy already running in the page. Message types carry
 // the version, so a stale copy that is still alive never answers a newer panel.
 (() => {
-const VERSION = 13;
+const VERSION = 14;
 if (window.__guidemeVersion === VERSION) return;
 if (window.__guidemeCleanup) window.__guidemeCleanup();
 window.__guidemeVersion = VERSION;
 
-const MAX_ELEMENTS = 150; // interactive elements + info snippets
-const MAX_INFO = 40;
+const MAX_ELEMENTS = 400; // interactive elements sent to the panel (the panel ranks them by relevance)
+const MAX_INFO = 40; // contact details + headings
+const MAX_PARAS = 80; // short blocks of page text (the panel keeps only the ones relevant to the goal)
+const PARA_TEXT = 160;
 const MAX_TEXT = 50;
 const INFO_TEXT = 80; // contact snippets get more room so the full phone/email/address survives
-const SELECTOR = 'button, a, input, select, [role=button]';
+const SELECTOR = 'button, a, input, select, textarea, summary, [role=button], [role=link], [role=tab], [role=menuitem]';
 
 let overlayHost = null;
 let pillHost = null;
@@ -33,6 +35,8 @@ let observer = null;
 let checkTimer = null;
 let clickWatch = null; // removes the click/change listeners on the highlighted element
 let retryTimer = null;
+let nextHint = ''; // what comes after this step (from the panel's look-ahead)
+let nextEl = null; // the card's "Next:" line while an overlay is shown
 
 // Small animated status pill at the top of the page (Shadow DOM, so site CSS can't touch it).
 function showStatus(text) {
@@ -157,9 +161,11 @@ function collectInfo(scope, taken, limit) {
     const key = text.toLowerCase();
     if (!text || seen.has(key) || el.hasAttribute('data-guideme-id') || taken.has(el)) return;
     seen.add(key);
-    list.push({ el, text });
+    list.push({ el, text, kind });
   };
+  let kind = 'contact';
 
+  kind = 'heading';
   for (const h of scope.querySelectorAll('h1, h2, h3')) {
     if (headings.length >= limit || !isRendered(h)) continue;
     add(headings, h, (h.innerText || '').replace(/\s+/g, ' ').trim().slice(0, MAX_TEXT));
@@ -177,11 +183,23 @@ function collectInfo(scope, taken, limit) {
     const parent = node.parentElement;
     if (!match || !parent || !isRendered(parent)) continue;
     if (parent.closest(SELECTOR)) continue; // links and buttons are already in the element list
+    kind = 'contact';
     add(contacts, parent, snippetAround(text, match, INFO_TEXT));
   }
 
-  // Contact details first, then headings, up to the limit.
-  return contacts.concat(headings).slice(0, limit);
+  // Short blocks of readable text (fees, dates, requirements...). The panel keeps only relevant ones.
+  kind = 'para';
+  const paras = [];
+  for (const block of scope.querySelectorAll('p, li, td, dd, address, figcaption, blockquote')) {
+    if (paras.length >= MAX_PARAS) break;
+    if (block.closest(SELECTOR) || block.querySelector('p, li, table')) continue;
+    const text = (block.innerText || '').replace(/\s+/g, ' ').trim();
+    if (text.length < 20 || !isRendered(block)) continue;
+    add(paras, block, text.slice(0, PARA_TEXT));
+  }
+
+  // Contact details first, then headings, up to the limit; then the text blocks.
+  return contacts.concat(headings).slice(0, limit).concat(paras);
 }
 
 const NAV_SELECTOR = 'header, nav, [role=navigation], [role=banner]';
@@ -220,6 +238,42 @@ function findMenuTrigger(el) {
   return trigger ? { trigger, menu: label(trigger) } : null;
 }
 
+// Text for an element. Fields never send what the user typed (privacy): only their label.
+const BUTTON_INPUTS = /^(submit|button|reset)$/i;
+function fieldLabel(el) {
+  const label = el.getAttribute('aria-label') || (el.labels && el.labels[0] && el.labels[0].innerText) || el.getAttribute('title') || el.name || '';
+  return clip(label, MAX_TEXT);
+}
+function textOf(el, tag) {
+  if (tag === 'select') return selectLabel(el);
+  if (tag === 'textarea' || (tag === 'input' && !BUTTON_INPUTS.test(el.type))) {
+    const kind = tag === 'input' && el.type && el.type !== 'text' ? ` (${el.type})` : '';
+    const label = fieldLabel(el);
+    return label ? `${label}${kind}` : '';
+  }
+  return clip(el.innerText || el.value || el.getAttribute('title'), MAX_TEXT);
+}
+
+// Where a link goes, as a short path (a strong hint about what it does). '' for buttons or "#" links.
+function hrefOf(el) {
+  const link = el.tagName === 'A' ? el : el.closest('a');
+  const raw = link && link.getAttribute('href');
+  if (!raw || raw.startsWith('#') || /^javascript:/i.test(raw)) return '';
+  try {
+    return new URL(raw, location.href).href;
+  } catch {
+    return '';
+  }
+}
+
+// The section an element sits in (its heading or label), e.g. "Undergraduate Programs".
+function contextOf(el) {
+  const box = el.closest('section, article, form, fieldset, aside, [role=region], [role=form]');
+  if (!box) return '';
+  const heading = box.getAttribute('aria-label') || (box.querySelector('h1, h2, h3, h4, legend') || {}).innerText || '';
+  return clip(heading, 30);
+}
+
 // Name for a <select>: aria-label, its <label>, the name/id, or a generic word.
 function selectLabel(el) {
   const label = el.getAttribute('aria-label') || (el.labels && el.labels[0] && el.labels[0].innerText) || el.name || el.id || 'Select';
@@ -256,7 +310,7 @@ function scanElements() {
 
     const tag = el.tagName.toLowerCase();
     const isSelect = tag === 'select';
-    const text = isSelect ? selectLabel(el) : clip(el.innerText || el.value, MAX_TEXT);
+    const text = textOf(el, tag);
     const ariaLabel = el.getAttribute('aria-label') || '';
     const placeholder = el.getAttribute('placeholder') || '';
     if (!text && !ariaLabel && !placeholder) continue;
@@ -265,7 +319,9 @@ function scanElements() {
     if (seen.has(key)) continue;
     seen.add(key);
 
-    const item = { el, tag, text, ariaLabel, placeholder, zone: modal ? 'modal' : zoneOf(el, rect), view, menu: '', options: [] };
+    const zone = modal ? 'modal' : zoneOf(el, rect);
+    const item = { el, tag, text, ariaLabel, placeholder, zone, view, menu: '', options: [], href: hrefOf(el), context: zone === 'main' || zone === 'modal' ? contextOf(el) : '' };
+    if (el.required || el.getAttribute('aria-required') === 'true') item.required = true;
     if (isSelect) {
       item.options = [...el.options].slice(0, MAX_OPTIONS + 1).map((o) => clip(o.textContent, 30)).filter(Boolean);
     }
@@ -285,28 +341,28 @@ function scanElements() {
     if (seen.has(key)) continue;
     seen.add(key);
 
-    const item = { el, tag, text, ariaLabel: '', placeholder: '', zone: modal ? 'modal' : 'header/nav', view: 'hidden', menu: found.menu, options: [] };
+    const item = { el, tag, text, ariaLabel: '', placeholder: '', zone: modal ? 'modal' : 'header/nav', view: 'hidden', menu: found.menu, options: [], href: hrefOf(el), context: '' };
     item.rank = rankOf(item);
     item.trigger = found.trigger;
     collected.push(item);
   }
 
-  const elements = collected.sort((a, b) => a.rank - b.rank).slice(0, MAX_ELEMENTS - MAX_INFO);
+  const elements = collected.sort((a, b) => a.rank - b.rank).slice(0, MAX_ELEMENTS);
 
-  const info = collectInfo(scope, taken, MAX_INFO).map(({ el, text }) => {
+  const info = collectInfo(scope, taken, MAX_INFO).map(({ el, text, kind }) => {
     const rect = el.getBoundingClientRect();
-    const item = { el, tag: 'info', text, ariaLabel: '', placeholder: '', zone: modal ? 'modal' : zoneOf(el, rect), view: viewOf(rect), menu: '', options: [] };
+    const item = { el, tag: 'info', kind, text, ariaLabel: '', placeholder: '', zone: modal ? 'modal' : zoneOf(el, rect), view: viewOf(rect), menu: '', options: [], href: '', context: '' };
     item.rank = rankOf(item);
     return item;
   });
 
-  const items = elements.concat(info).sort((a, b) => a.rank - b.rank).slice(0, MAX_ELEMENTS);
+  const items = elements.concat(info).sort((a, b) => a.rank - b.rank);
   const out = items.map((item, i) => {
     const id = String(i + 1);
     item.el.setAttribute('data-guideme-id', id);
     if (item.trigger) hiddenMenus.set(id, { trigger: item.trigger, menu: item.menu, text: item.text });
-    const { tag, text, ariaLabel, placeholder, zone, view, menu, options } = item;
-    return { id, tag, text, ariaLabel, placeholder, zone, view, menu, menuId: '', options, moreOptions: tag === 'select' && options.length > MAX_OPTIONS };
+    const { tag, kind, text, ariaLabel, placeholder, zone, view, menu, options, href, context, required } = item;
+    return { id, tag, kind: kind || '', text, ariaLabel, placeholder, zone, view, menu, menuId: '', options, moreOptions: tag === 'select' && options.length > MAX_OPTIONS, href, context, required: !!required };
   });
   // Second pass, once every scanned item has its id: a hidden item's menuId is its trigger's id
   // (the trigger gets a live id if it did not make it into the list).
@@ -391,6 +447,7 @@ function clearHighlight() {
   stopWatchingClicks();
   if (overlayHost) overlayHost.remove();
   overlayHost = null;
+  nextEl = null;
   restoreMenu();
 }
 
@@ -479,6 +536,8 @@ const OVERLAY_CSS = `
   .step { font-size: 12px; font-weight: 700; letter-spacing: 0.03em; text-transform: uppercase; color: #10b981; }
   .text { margin-top: 4px; font-size: 15px; line-height: 1.4; }
   .notice { margin-top: 8px; font-size: 13px; color: #b45309; }
+  .next { margin-top: 8px; padding-top: 8px; border-top: 1px solid #e5e7eb; font-size: 12.5px; color: #4f46e5; }
+  .next b { font-weight: 700; }
   .footer { margin-top: 10px; font-size: 11px; color: #6b7280; }
   .close {
     position: absolute;
@@ -528,13 +587,15 @@ async function highlight(id, instruction, step, live = false) {
   // A hidden dropdown item: open its menu first, with a plain wording the user can follow.
   const hidden = hiddenMenus.get(String(id));
   if (hidden && !shown(el)) {
+    // Keep Gemma's wording (it is in the user's language) when it already names the item.
+    const named = instruction && instruction.toLowerCase().includes(hidden.text.toLowerCase());
     if (await openMenuFor(el, hidden.trigger)) {
-      instruction = `Under ${hidden.menu}, click '${hidden.text}'`;
+      if (!named) instruction = menuWords(hidden.menu, hidden.text);
     } else {
       // The menu would not open: point at the visible trigger instead.
       restoreMenu();
       el = hidden.trigger;
-      instruction = `Hover ${hidden.menu}, then click '${hidden.text}'`;
+      if (!named || !instruction.toLowerCase().includes(hidden.menu.toLowerCase())) instruction = `Hover ${hidden.menu}, then click '${hidden.text}'`;
     }
   }
 
@@ -553,10 +614,13 @@ async function highlight(id, instruction, step, live = false) {
       <div class="step"></div>
       <div class="text"></div>
       <div class="notice" hidden>Scroll to see the highlighted item</div>
+      <div class="next" hidden><b>Next:</b> <span></span></div>
       <div class="footer">GuideMe</div>
       <button class="close" type="button" aria-label="Close">×</button>
     </div>`;
   const ring = shadow.querySelector('.ring');
+  nextEl = shadow.querySelector('.next');
+  showNext(nextHint);
   const badge = shadow.querySelector('.badge');
   const card = shadow.querySelector('.card');
   const notice = shadow.querySelector('.notice');
@@ -626,6 +690,22 @@ async function highlight(id, instruction, step, live = false) {
   return { ok: true, instruction };
 }
 
+// "Under MENU, click 'ITEM'" in the user's language (en, Roman Urdu, Urdu script).
+function menuWords(menu, item) {
+  const lang = session && session.lang;
+  if (lang === 'roman') return `${menu} menu mein '${item}' par click karein`;
+  if (lang === 'ur') return `${menu} مینو میں '${item}' پر کلک کریں`;
+  return `Under ${menu}, click '${item}'`;
+}
+
+function showNext(text) {
+  nextHint = text || '';
+  if (!nextEl) return;
+  nextEl.querySelector('span').textContent = nextHint;
+  nextEl.dir = /[֐-ࣿ]/.test(nextHint) ? 'rtl' : 'ltr';
+  nextEl.hidden = !nextHint;
+}
+
 // --- Live dropdown guidance: while a session is active, notice submenus the user opens. ---
 const CHECK_DEBOUNCE_MS = 250;
 const MAX_NAV_ITEMS = 600;
@@ -678,6 +758,7 @@ function describeItem(el) {
     view: 'in view',
     menu: '',
     options: [],
+    href: hrefOf(el),
   };
 }
 
@@ -760,8 +841,9 @@ function checkDropdowns() {
   // 2a. The Navigator's target is inside this submenu: highlight it now, no API call.
   const target = session.targetId && items.find((item) => item.id === session.targetId);
   if (target) {
-    showLiveHighlight(target.id, `Under ${found.menu}, click '${target.text}'`);
-    tellPanel({ parent: found.menu, handled: true, item: target.text });
+    const said = menuWords(found.menu, target.text);
+    showLiveHighlight(target.id, said);
+    tellPanel({ parent: found.menu, handled: true, item: target.text, instruction: said });
     return;
   }
 
@@ -769,8 +851,9 @@ function checkDropdowns() {
   const pick = session.menuPicks.find((p) => items.some((item) => item.id === p.itemId));
   if (pick) {
     const picked = items.find((item) => item.id === pick.itemId);
-    showLiveHighlight(picked.id, `Under ${found.menu}, click '${picked.text}'`);
-    tellPanel({ parent: found.menu, handled: true, prefetched: true, item: picked.text });
+    const said = menuWords(found.menu, picked.text);
+    showLiveHighlight(picked.id, said);
+    tellPanel({ parent: found.menu, handled: true, prefetched: true, item: picked.text, instruction: said });
     return;
   }
 
@@ -808,7 +891,7 @@ function onMutations(records) {
 
 const NAV_EVENTS = ['mouseover', 'focusin', 'mouseout', 'focusout'];
 
-function setSession(active, targetId, menuPicks, step) {
+function setSession(active, targetId, menuPicks, step, lang) {
   if (!active) {
     session = null;
     liveMenu = null;
@@ -822,7 +905,7 @@ function setSession(active, targetId, menuPicks, step) {
     return;
   }
   const wasActive = !!session;
-  session = { targetId: targetId || null, menuPicks: Array.isArray(menuPicks) ? menuPicks : [], step: step || 1 };
+  session = { targetId: targetId || null, menuPicks: Array.isArray(menuPicks) ? menuPicks : [], step: step || 1, lang: lang || 'en' };
   if (wasActive) return; // already watching; only the target and picks changed
   snapshotVisible();
   NAV_EVENTS.forEach((type) => document.addEventListener(type, onNavEvent, true));
@@ -874,8 +957,10 @@ function stopWatchingClicks() {
 // Tells the panel once when the user clicks the highlighted element (or changes it, for a select).
 function watchClicks(el) {
   stopWatchingClicks();
-  if (el.tagName === 'SELECT') {
-    const onChange = () => report(`Chose '${clip(el.selectedOptions[0] && el.selectedOptions[0].textContent, 40)}'`);
+  if (el.tagName === 'SELECT' || el.tagName === 'TEXTAREA' || (el.tagName === 'INPUT' && !BUTTON_INPUTS.test(el.type) && !/^(checkbox|radio)$/i.test(el.type))) {
+    // Never report what the user typed: only that the field was filled.
+    const onChange = () =>
+      report(el.tagName === 'SELECT' ? `Chose '${clip(el.selectedOptions[0] && el.selectedOptions[0].textContent, 40)}'` : `Filled '${fieldLabel(el) || 'the field'}'`);
     el.addEventListener('change', onChange);
     clickWatch = () => el.removeEventListener('change', onChange);
     return;
@@ -958,7 +1043,11 @@ function showErrorCard(text) {
 function onMessage(message, sender, sendResponse) {
   if (message.type === `guideme${VERSION}:scan`) {
     sendResponse({ elements: scanElements(), title: document.title, url: location.href, version: VERSION });
+  } else if (message.type === `guideme${VERSION}:next`) {
+    showNext(message.text);
+    sendResponse({ ok: true });
   } else if (message.type === `guideme${VERSION}:highlight`) {
+    nextHint = message.next || '';
     highlight(message.id, message.instruction, message.step)
       .then(sendResponse)
       .catch((err) => sendResponse({ ok: false, instruction: message.instruction, error: String(err && err.message) }));
@@ -974,7 +1063,7 @@ function onMessage(message, sender, sendResponse) {
     showErrorCard(message.text);
     sendResponse({ ok: true });
   } else if (message.type === `guideme${VERSION}:session`) {
-    setSession(message.active, message.targetId, message.menuPicks, message.step);
+    setSession(message.active, message.targetId, message.menuPicks, message.step, message.lang);
     sendResponse({ ok: true });
   } else if (message.type === `guideme${VERSION}:live-highlight`) {
     // The panel picked an item from the dropdown that is open now.

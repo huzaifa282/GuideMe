@@ -2,18 +2,65 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>GuideMe</title>
   <link rel="stylesheet" href="sidepanel.css">
 </head>
 <body>
-  <h1>GuideMe</h1>
-  <label for="goal">What do you want to do?</label>
-  <input id="goal" type="text" placeholder="What do you want to do?" autocomplete="off">
-  <button id="start">Start</button>
-  <button id="stop" disabled>Stop</button>
-  <button id="retry" hidden>Retry</button>
-  <a href="#" id="options-link">Options</a>
-  <div id="log" aria-live="polite"></div>
+  <header class="top">
+    <img class="logo" src="icons/logo.svg" alt="" width="34" height="34">
+    <div class="brand">
+      <h1>GuideMe</h1>
+      <p class="tag">Shows you where to click · Gemma 4</p>
+    </div>
+    <button id="settings" class="icon-btn" type="button" aria-label="Settings" title="Settings">
+      <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M19.4 13a7.6 7.6 0 0 0 0-2l2.1-1.6-2-3.5-2.5 1a7.4 7.4 0 0 0-1.7-1L15 3h-4l-.4 2.7a7.4 7.4 0 0 0-1.7 1l-2.5-1-2 3.5L6.6 11a7.6 7.6 0 0 0 0 2l-2.1 1.6 2 3.5 2.5-1c.5.4 1.1.8 1.7 1L11 21h4l.4-2.7c.6-.3 1.2-.6 1.7-1l2.5 1 2-3.5zM13 15.5a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7z" transform="translate(-1 0)"/></svg>
+    </button>
+  </header>
+
+  <main>
+    <section id="ask" class="card ask">
+      <label for="goal">What do you want to do?</label>
+      <textarea id="goal" rows="3" placeholder="e.g. I want to apply for undergraduate admission" autocomplete="off"></textarea>
+      <div class="chips" aria-label="Examples">
+        <button class="chip" type="button" data-goal="I want to apply for undergraduate admission">Apply for admission</button>
+        <button class="chip" type="button" data-goal="contact number kya hai?">Contact number kya hai?</button>
+        <button class="chip" type="button" data-goal="مجھے فیس واؤچر چاہیے">فیس واؤچر</button>
+      </div>
+      <button id="start" class="primary" type="button">Guide me</button>
+      <p id="key-hint" class="hint" hidden>First add your free Gemini API key in <b>Settings</b> (the gear above).</p>
+      <p class="small">Type in English, Urdu or Roman Urdu. GuideMe highlights each step on the page; you do the clicking.</p>
+    </section>
+
+    <section id="session" hidden>
+      <div class="card goal-card">
+        <p class="eyebrow">Your goal</p>
+        <p id="goal-text" class="goal"></p>
+        <p id="understood" class="understood" hidden></p>
+        <div id="status" class="status" data-kind="busy" role="status" aria-live="polite">
+          <span class="spinner" aria-hidden="true"></span>
+          <span id="status-text">Starting...</span>
+        </div>
+      </div>
+
+      <h2 class="section-title">Steps</h2>
+      <ol id="steps" class="steps" aria-live="polite"></ol>
+
+      <div class="controls">
+        <button id="retry" class="primary" type="button" hidden>Retry</button>
+        <button id="stop" class="secondary" type="button" hidden>Stop</button>
+        <button id="new-goal" class="secondary" type="button" hidden>New goal</button>
+      </div>
+    </section>
+
+    <details class="devlog">
+      <summary>Activity log</summary>
+      <div id="log"></div>
+    </details>
+  </main>
+
+  <footer class="foot">Open source · Apache 2.0 · Gemma 4 via the Gemini API</footer>
+
   <script src="env.js"></script>
   <script src="sidepanel.js"></script>
 </body>
