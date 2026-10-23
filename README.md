@@ -77,21 +77,49 @@ GuideMe runs as a side panel (the "orchestrator") next to the page. Each step go
 - **Response cache.** Repeating the same request on the same page is answered instantly from memory.
 - **Links stay in your tab.** Highlighted links that would open a new tab are kept in the current tab so you never lose your place.
 
-## 5. Install
+## 5. Install and run
 
-You need Google Chrome 116 or newer.
+GuideMe is a Chrome extension that you load yourself, so it takes about three minutes and needs **Google Chrome 116 or newer**. (A website cannot install a Chrome extension by itself, because Chrome only allows one-click installs from the Chrome Web Store.) Each person uses their own free Gemini API key.
+
+### Quick start
+
+Open the **[GuideMe setup page](https://huzaifa282.github.io/GuideMe/)** for a download button and the same steps with a copy button for `chrome://extensions`. Or follow the steps here:
 
 1. **Get a free Gemini API key** at <https://aistudio.google.com/apikey>.
-2. **Get the code.** Clone it, or download the ZIP from GitHub and unzip it:
+2. **Get the code.** Download the ZIP ([`main.zip`](https://github.com/huzaifa282/GuideMe/archive/refs/heads/main.zip)) and unzip it, or clone it:
    ```bash
    git clone https://github.com/huzaifa282/GuideMe.git
    ```
-3. Open `chrome://extensions` and switch on **Developer mode** (top right).
-4. Click **Load unpacked** and select the `GuideMe` folder (the one containing `manifest.json`).
-5. Open the extension's **Options** page (the link in the side panel, or right-click the icon → *Options*), paste your API key and press **Save**. You can also pick the model there.
-6. Open any website, **click the GuideMe icon** to open the side panel, type what you want to do and press **Start**.
+3. Open `chrome://extensions` in Chrome and switch on **Developer mode** (top right).
+4. Click **Load unpacked** and select the folder that contains `manifest.json` (`GuideMe-main` if you used the ZIP, `GuideMe` if you cloned).
+5. Click the puzzle-piece icon in the Chrome toolbar and **pin GuideMe**.
+6. Open the extension's **Options** page (right-click the GuideMe icon → *Options*, or use the *Options* link in the side panel), paste your API key and press **Save**. You can also choose the model there.
 
-*Alternative for developers:* copy `env.example.js` to `env.js` (it is git-ignored), put your key in it and reload the extension. A key saved in Options takes priority.
+### Using GuideMe
+
+1. Open the website you need help with (a normal web page, not a `chrome://` page).
+2. **Click the GuideMe icon.** The side panel opens and stays open while you click around the page.
+3. Type what you want to do (for example *"apply for undergraduate admission"*) and press **Start**.
+4. GuideMe highlights the next thing to click and shows a short instruction at the edge of the screen.
+5. **Click the highlighted item.** GuideMe moves on to the next step by itself, even when the click opens a new page. When the goal is reached you will see an **All done!** card.
+6. Press **Stop** at any time to end the session. Press **Esc** or the **×** on the card to hide a highlight.
+
+### For developers
+
+- After editing a file, click the **reload arrow** on GuideMe's card at `chrome://extensions`, then **close and reopen the side panel** (an open panel keeps running the old code).
+- Instead of the Options page you can copy `env.example.js` to `env.js` (it is git-ignored), put your key in it and reload the extension. A key saved in Options takes priority.
+- The orchestration lives in the side panel: right-click the panel → *Inspect* to see its console. The page script (`content.js`) logs to the page's own DevTools console, and `background.js` only opens the panel.
+
+### Troubleshooting
+
+| What you see | What to do |
+|---|---|
+| `Add your API key in Options` | Open Options, paste your key from <https://aistudio.google.com/apikey> and Save. |
+| `Cannot run on this page` | Chrome blocks extensions on `chrome://` pages and the Chrome Web Store. Open a normal website. |
+| `Still trying...` | The API is slow or returned an error. GuideMe retries and may switch models by itself. |
+| A **Retry** button appears | Every retry failed. Press Retry to continue from the same step without starting over. |
+| Nothing is highlighted | The page may still be loading, or the content is inside an iframe. Wait a moment and press Start again. |
+| The panel seems to ignore a code change | Reload the extension and reopen the side panel. |
 
 ## 6. Privacy
 

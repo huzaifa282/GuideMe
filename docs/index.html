@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>GuideMe: Set up in 3 minutes</title>
+  <meta name="description" content="GuideMe is an open-source Chrome extension that shows you where to click, step by step, on any website. Download it and set it up in three minutes.">
+  <style>
+    :root {
+      --bg: #ffffff;
+      --surface: #f6f8f7;
+      --text: #111827;
+      --muted: #4b5563;
+      --border: #d9e0dd;
+      --accent: #059669;
+      --accent-strong: #047857;
+      --on-accent: #ffffff;
+      --code-bg: #eef2f0;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #0f1412;
+        --surface: #17201c;
+        --text: #f3f4f6;
+        --muted: #a7b3ad;
+        --border: #2a3731;
+        --accent: #10b981;
+        --accent-strong: #34d399;
+        --on-accent: #04130d;
+        --code-bg: #1f2a25;
+      }
+    }
+    * { box-sizing: border-box; }
+    html { -webkit-text-size-adjust: 100%; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font: 16px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    }
+    main { max-width: 720px; margin: 0 auto; padding: 32px 16px 64px; }
+    h1 { font-size: clamp(1.9rem, 6vw, 2.6rem); line-height: 1.15; margin: 0 0 8px; }
+    h2 { font-size: 1.3rem; margin: 40px 0 12px; }
+    p { margin: 0 0 12px; }
+    a { color: var(--accent-strong); }
+    .lead { font-size: 1.15rem; color: var(--muted); max-width: 40em; }
+    .badge {
+      display: inline-block;
+      margin-bottom: 12px;
+      padding: 2px 10px;
+      border-radius: 999px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      color: var(--muted);
+      font-size: 0.85rem;
+    }
+    .actions { display: flex; flex-wrap: wrap; gap: 12px; margin: 24px 0 8px; }
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 48px;
+      padding: 0 22px;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      color: var(--text);
+      font: inherit;
+      font-weight: 600;
+      text-decoration: none;
+      cursor: pointer;
+    }
+    .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+    .btn:hover { filter: brightness(1.05); }
+    .btn:focus-visible, a:focus-visible { outline: 3px solid var(--accent-strong); outline-offset: 2px; }
+    .small { font-size: 0.9rem; color: var(--muted); }
+    ol.steps { list-style: none; counter-reset: step; padding: 0; margin: 0; }
+    ol.steps li {
+      counter-increment: step;
+      position: relative;
+      margin: 0 0 14px;
+      padding: 16px 16px 16px 60px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+    }
+    ol.steps li::before {
+      content: counter(step);
+      position: absolute;
+      left: 16px;
+      top: 16px;
+      width: 30px;
+      height: 30px;
+      border-radius: 50%;
+      background: var(--accent);
+      color: var(--on-accent);
+      font-weight: 700;
+      line-height: 30px;
+      text-align: center;
+    }
+    ol.steps h3 { margin: 0 0 4px; font-size: 1.05rem; }
+    ol.steps p { margin: 0 0 8px; color: var(--muted); }
+    ol.steps .row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 8px; }
+    code {
+      padding: 2px 6px;
+      border-radius: 6px;
+      background: var(--code-bg);
+      font: 0.92em ui-monospace, Consolas, monospace;
+      overflow-wrap: anywhere;
+    }
+    .demo {
+      display: grid;
+      place-items: center;
+      min-height: 160px;
+      padding: 16px;
+      border: 2px dashed var(--border);
+      border-radius: 14px;
+      color: var(--muted);
+      text-align: center;
+    }
+    details { margin: 0 0 10px; padding: 12px 16px; border: 1px solid var(--border); border-radius: 12px; }
+    summary { cursor: pointer; font-weight: 600; }
+    details p { margin: 8px 0 0; color: var(--muted); }
+    footer { margin-top: 48px; padding-top: 16px; border-top: 1px solid var(--border); }
+  </style>
+</head>
+<body>
+  <main>
+    <span class="badge">Open source · Apache 2.0</span>
+    <h1>GuideMe: show me where to click</h1>
+    <p class="lead">A Chrome extension that guides you through any website step by step, in English or Urdu. It points at the right button and tells you what to do, so you learn to do it yourself.</p>
+
+    <div class="actions">
+      <a class="btn primary" href="https://github.com/huzaifa282/GuideMe/archive/refs/heads/main.zip">Download GuideMe (ZIP)</a>
+      <a class="btn" href="https://github.com/huzaifa282/GuideMe">View on GitHub</a>
+    </div>
+    <p class="small">Needs Google Chrome 116 or newer on a computer. Setup takes about three minutes.</p>
+
+    <h2>Demo</h2>
+    <div class="demo"><!-- TODO: replace with the demo GIF or video link --><span>Demo GIF / video: coming soon</span></div>
+
+    <h2>Set it up</h2>
+    <ol class="steps">
+      <li>
+        <h3>Download and unzip</h3>
+        <p>Press the green <strong>Download GuideMe (ZIP)</strong> button above, then unzip the file. You will get a folder called <code>GuideMe-main</code>. Keep it somewhere permanent, because Chrome loads the extension from it.</p>
+      </li>
+      <li>
+        <h3>Open Chrome's extensions page</h3>
+        <p>Websites cannot open this page for you, so copy its address and paste it into a new Chrome tab.</p>
+        <div class="row">
+          <code id="addr">chrome://extensions</code>
+          <button class="btn" type="button" id="copy">Copy address</button>
+          <span class="small" id="copied" role="status" aria-live="polite"></span>
+        </div>
+      </li>
+      <li>
+        <h3>Turn on Developer mode and load the folder</h3>
+        <p>Switch on <strong>Developer mode</strong> (top right), click <strong>Load unpacked</strong>, and choose the <code>GuideMe-main</code> folder, the one that contains a file named <code>manifest.json</code>.</p>
+      </li>
+      <li>
+        <h3>Add your free API key</h3>
+        <p>GuideMe uses Google's Gemma 4 through the Gemini API, and every person uses their own free key.</p>
+        <div class="row">
+          <a class="btn" href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">Get a free API key</a>
+        </div>
+        <p style="margin-top:10px">Then right-click the GuideMe icon (pin it first from the puzzle-piece menu), choose <strong>Options</strong>, paste the key and press <strong>Save</strong>.</p>
+      </li>
+      <li>
+        <h3>Try it</h3>
+        <p>Open any website, click the GuideMe icon, type what you want to do (for example <em>"apply for undergraduate admission"</em>) and press <strong>Start</strong>. Click the highlighted item, and GuideMe takes you to the next step. Press <strong>Stop</strong> to finish.</p>
+      </li>
+    </ol>
+
+    <h2>Questions</h2>
+    <details>
+      <summary>Why do I have to use Developer mode?</summary>
+      <p>Chrome only lets websites install extensions from the Chrome Web Store. GuideMe is loaded directly from the folder you downloaded, which is why Chrome asks for Developer mode. Nothing is installed anywhere else.</p>
+    </details>
+    <details>
+      <summary>What is sent to Google?</summary>
+      <p>To choose the next step, GuideMe sends the page title, its address, your goal, and short texts of buttons, links and info on the page from your browser to Google's Gemini API. GuideMe has no server of its own and keeps your API key only in your browser.</p>
+    </details>
+    <details>
+      <summary>It says "Add your API key in Options" or "Cannot run on this page"</summary>
+      <p>Paste your key in the Options page and press Save. Chrome does not allow extensions on <code>chrome://</code> pages or the Chrome Web Store, so open a normal website instead.</p>
+    </details>
+
+    <footer class="small">
+      <p>Built at Hacktoberfest Hack Day Faisalabad 2026 · <a href="https://github.com/huzaifa282/GuideMe">Source code and full README</a> · Apache License 2.0</p>
+    </footer>
+  </main>
+
+  <script>
+    // Websites cannot open chrome:// pages, so offer a copy button instead of a link.
+    (function () {
+      var button = document.getElementById('copy');
+      var label = document.getElementById('copied');
+      var text = document.getElementById('addr').textContent;
+
+      function done(ok) {
+        label.textContent = ok ? 'Copied!' : 'Select the address and press Ctrl+C.';
+        setTimeout(function () { label.textContent = ''; }, 2500);
+      }
+
+      function fallback() {
+        var range = document.createRange();
+        range.selectNodeContents(document.getElementById('addr'));
+        var selection = window.getSelection();
+        selection.removeAllRanges();
+        selection.addRange(range);
+        var ok = false;
+        try { ok = document.execCommand('copy'); } catch (e) {}
+        done(ok);
+      }
+
+      button.addEventListener('click', function () {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          var settled = false;
+          // If the browser never answers (e.g. the page is not focused), still give the user a way to copy.
+          var timer = setTimeout(function () { if (!settled) { settled = true; fallback(); } }, 800);
+          navigator.clipboard.writeText(text).then(function () {
+            if (settled) return;
+            settled = true;
+            clearTimeout(timer);
+            done(true);
+          }, function () {
+            if (settled) return;
+            settled = true;
+            clearTimeout(timer);
+            fallback();
+          });
+        } else {
+          fallback();
+        }
+      });
+    })();
+  </script>
+</body>
+</html>
