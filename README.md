@@ -60,9 +60,10 @@ AI agents solve this by doing the task *for* you. GuideMe does the opposite: it 
 
 ## 🎬 Demo
 
-> **Demo GIF / video: coming soon.**
->
-> <!-- TODO: replace this block with a GIF or a video link, e.g. [![Demo](demo.gif)](https://...) -->
+
+https://github.com/user-attachments/assets/fbe5b262-e18e-4a65-aa10-0c51aa0bc00d
+
+
 
 ## ⚙️ How it works
 
